@@ -24,6 +24,14 @@ function parseResume(md) {
   return blocks;
 }
 
+// Sections whose bullets must not be rewritten. They are factual records.
+// Skills section IS rewritable per product spec — only Projects/Publications/Education are frozen.
+const PROTECTED_SECTIONS = new Set(["projects", "publications", "education"]);
+
+function isProtected(sectionTitle) {
+  return PROTECTED_SECTIONS.has((sectionTitle || "").toLowerCase().trim());
+}
+
 // Build a grouped view for rewrite calls: each section produces one model call
 // with all its bullets together, so the model sees local context (job title etc).
 function groupBulletsBySection(blocks) {
@@ -37,6 +45,7 @@ function groupBulletsBySection(blocks) {
       sections.push({
         section: currentTitle,
         subheading: currentSubheading,
+        protected: isProtected(currentTitle),
         bullets: currentBullets
       });
       currentBullets = [];
