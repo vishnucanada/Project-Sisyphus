@@ -1,6 +1,7 @@
 const $ = (id) => document.getElementById(id);
 const status = (msg) => { $("status").textContent = msg; };
 
+const GOOD_ENOUGH_THRESHOLD = 0.70;
 let CURRENT_BLOCKS = null;
 let CURRENT_META = null;
 let CURRENT_KEYWORDS = [];
@@ -151,8 +152,31 @@ $("clearHistBtn").addEventListener("click", async () => {
   if (confirm("Clear all saved applications?")) { await HISTORY.clearHistory(); renderHistory(); }
 });
 
+async function runRewrite(blocks, ctx) {
+  const sections = RESUME_PARSER.groupBulletsBySection(blocks);
+  for (const sec of sections) {
+    if (sec.protected) { sec.bullets.forEach(b => { b.tailored = b.original; }); continue; }
+    status(`Rewriting: ${sec.section} (${sec.bullets.length})…`);
+    try {
+      const tailored = await MODEL.rewriteBullets({
+        jd: ctx.jd, keywords: ctx.keywords,
+        sectionTitle: sec.section, subheading: sec.subheading,
+        bullets: sec.bullets
+      });
+      sec.bullets.forEach((b, i) => { b.tailored = tailored[i] ?? b.original; });
+      renderDiff(blocks, ctx.keywords);
+    } catch (e) {
+      status(`Section "${sec.section}" failed: ${e.message}`);
+      sec.bullets.forEach(b => { b.tailored = b.original; });
+    }
+  }
+  CURRENT_BLOCKS = blocks;
+  status("Done.");
+}
+
 $("tailorBtn").addEventListener("click", async () => {
-  $("diff").innerHTML = ""; $("fitgap").innerHTML = ""; $("qualBanner").innerHTML = "";
+  $("diff").innerHTML = ""; $("fitgap").innerHTML = "";
+  $("qualBanner").innerHTML = ""; $("goodEnough").innerHTML = "";
   CURRENT_BLOCKS = null;
 
   status("Scraping JD…");
@@ -176,45 +200,49 @@ $("tailorBtn").addEventListener("click", async () => {
   status("Extracting JD keywords…");
   const cls = await MODEL.classify(scrape.text, Object.keys(variants));
   CURRENT_KEYWORDS = cls.keywords;
-  renderFitGap(PROMPTS.fitGap(cls.keywords, resumeText));
+  const gap = PROMPTS.fitGap(cls.keywords, resumeText);
+  renderFitGap(gap);
 
-  const blocks = RESUME_PARSER.parseResume(resumeText);
-  const sections = RESUME_PARSER.groupBulletsBySection(blocks);
-  for (const sec of sections) {
-    if (sec.protected) {
-      sec.bullets.forEach(b => { b.tailored = b.original; });
-      renderDiff(blocks, cls.keywords);
-      continue;
-    }
-    status(`Rewriting: ${sec.section} (${sec.bullets.length})…`);
-    try {
-      const tailored = await MODEL.rewriteBullets({
-        jd: scrape.text, keywords: cls.keywords,
-        sectionTitle: sec.section, subheading: sec.subheading,
-        bullets: sec.bullets
-      });
-      sec.bullets.forEach((b, i) => { b.tailored = tailored[i] ?? b.original; });
-      renderDiff(blocks, cls.keywords);
-    } catch (e) {
-      status(`Section "${sec.section}" failed: ${e.message}`);
-      sec.bullets.forEach(b => { b.tailored = b.original; });
-    }
-  }
-
-  CURRENT_BLOCKS = blocks;
+  const ctx = { jd: scrape.text, keywords: cls.keywords };
   CURRENT_META = {
     url: scrape.url, site: scrape.site,
     company: scrape.company || "", role: scrape.title || "",
     variant: match.label, keywords: cls.keywords,
     qualVerdict: qual?.verdict || "unknown"
   };
-  status("Done.");
+
+  // "Good enough" gate
+  if (gap.coverage >= GOOD_ENOUGH_THRESHOLD && !$("forceRewriteBtn").checked) {
+    const blocks = RESUME_PARSER.parseResume(resumeText);
+    CURRENT_BLOCKS = blocks;
+    renderDiff(blocks, cls.keywords);
+    $("goodEnough").innerHTML = `
+      <div class="qual-banner qual-qualified">
+        Resume already well-aligned (${Math.round(gap.coverage * 100)}% coverage). Rewrite optional.
+        <button id="rewriteAnywayBtn" style="margin-left:6px">Rewrite anyway</button>
+      </div>`;
+    $("rewriteAnywayBtn").addEventListener("click", async () => {
+      $("goodEnough").innerHTML = "<em>Rewriting…</em>";
+      await runRewrite(RESUME_PARSER.parseResume(resumeText), ctx);
+      $("goodEnough").innerHTML = "";
+    });
+    status("No rewrite needed — preview/export the original.");
+    return;
+  }
+
+  const blocks = RESUME_PARSER.parseResume(resumeText);
+  await runRewrite(blocks, ctx);
+});
+
+$("previewBtn").addEventListener("click", () => {
+  if (!CURRENT_BLOCKS) return status("Nothing to preview yet.");
+  PREVIEW.openPreview(CURRENT_BLOCKS, `Resume — ${CURRENT_META?.variant || "preview"}`);
 });
 
 $("copyBtn").addEventListener("click", () => {
   if (!CURRENT_BLOCKS) return;
   navigator.clipboard.writeText(RESUME_PARSER.serializeBlocks(CURRENT_BLOCKS));
-  status("Copied.");
+  status("Copied tailored resume to clipboard.");
 });
 
 $("docxBtn").addEventListener("click", async () => {

@@ -51,14 +51,17 @@
     <div id="matchSummary"></div>
     <div id="qualBanner"></div>
     <label style="font-size:11px"><input type="checkbox" id="overrideQualBtn"> Override qualification block</label>
+    <label style="font-size:11px"><input type="checkbox" id="forceRewriteBtn"> Force rewrite</label>
     <h3>Fit gap</h3>
     <div id="fitgap"></div>
-    <h3>Bullet diff <small>(click a bullet to edit)</small></h3>
+    <div id="goodEnough"></div>
+    <h3>Bullet diff <small>(click right column to edit)</small></h3>
     <div id="diff"></div>
     <p>
-      <button id="copyBtn">Copy markdown</button>
-      <button id="docxBtn">Download .docx</button>
-      <button id="saveBtn">Save to history</button>
+      <button id="previewBtn" title="Open the tailored resume rendered as a real document in a new tab">Preview</button>
+      <button id="copyBtn" title="Copy the tailored resume text to clipboard (paste into LinkedIn, Notion, docs)">Copy text</button>
+      <button id="docxBtn" title="Download as a Word .docx with formatting">Download .docx</button>
+      <button id="saveBtn" title="Save this application to history">Save to history</button>
     </p>
   </section>
 
@@ -72,14 +75,15 @@
     <p><button id="saveVarsBtn">Save variants</button></p>
   </section>
 
-  <script src="prompts.js"></script>
-  <script src="resume-parser.js"></script>
-  <script src="validator.js"></script>
-  <script src="diff.js"></script>
-  <script src="resumes.js"></script>
-  <script src="applications.js"></script>
-  <script src="model-gemini.js"></script>
-  <script type="module" src="docx-export.js"></script>
+  <script src="../src/core/prompts.js"></script>
+  <script src="../src/core/resume-parser.js"></script>
+  <script src="../src/core/validator.js"></script>
+  <script src="../src/core/diff.js"></script>
+  <script src="../src/data/resumes.js"></script>
+  <script src="../src/lib/history.js"></script>
+  <script src="../src/lib/preview.js"></script>
+  <script src="../src/models/gemini.js"></script>
+  <script type="module" src="../src/lib/docx.js"></script>
   <script src="sidepanel.js"></script>
 </body>
 </html>
