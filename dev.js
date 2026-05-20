@@ -1,14 +1,18 @@
 const $ = (id) => document.getElementById(id);
 const log = (msg) => { $("log").textContent += msg + "\n"; $("log").scrollTop = 1e9; };
 
-const DEFAULT_VARIANTS = {
-  backend: "# Jane Doe — Backend Engineer\n## Experience\n- Built X serving Y rps\n## Skills\n- Go, Postgres, Kafka",
-  ml: "# Jane Doe — ML Engineer\n## Experience\n- Trained Z model\n## Skills\n- PyTorch, ranking, embeddings",
-  frontend: "# Jane Doe — Frontend Engineer\n## Experience\n- Shipped X feature\n## Skills\n- React, TypeScript, a11y"
-};
+$("variants").value = JSON.stringify(window.RESUMES, null, 2);
 
-$("variants").value = JSON.stringify(DEFAULT_VARIANTS, null, 2);
-$("jd").value = "We're hiring a backend engineer to scale our Go services on Postgres and Kafka. You'll own observability and SLOs.";
+const sampleJd = $("sampleJd");
+for (const [key, jd] of Object.entries(window.SAMPLE_JDS)) {
+  const opt = document.createElement("option");
+  opt.value = key; opt.textContent = key;
+  sampleJd.appendChild(opt);
+}
+sampleJd.addEventListener("change", () => {
+  if (sampleJd.value) $("jd").value = window.SAMPLE_JDS[sampleJd.value];
+});
+$("jd").value = window.SAMPLE_JDS.ml_role;
 
 // MODEL is set by either model-gemini.js (sync) or model-webllm.js (ESM, async).
 async function waitForModel(timeoutMs = 5000) {
