@@ -1,7 +1,20 @@
 // Prompt definitions and JSON schemas only — no model implementation.
 
 const CLASSIFY_SYSTEM =
-`You classify a job description into ONE label from a provided list, and extract keywords.
+`You classify a job description into ONE label from a provided list, and extract TECHNICAL keywords.
+
+For the keywords list, ONLY include:
+- Specific technologies, languages, frameworks, libraries (Python, PyTorch, React, Kubernetes)
+- Concrete methodologies or techniques (knowledge distillation, A/B testing, CI/CD, RAG)
+- Specific domains or systems (5G, edge inference, MIMO, recommendation systems)
+
+DO NOT include:
+- Job perks: salary, benefits, vacation, PTO, equity, healthcare, e-learning, development opportunities, career growth, remote, hybrid
+- Generic single words: engineering, software, data, technology, quantitative, field, role, team, work, business, industry, experience, skills, knowledge
+- Soft skills: communication, leadership, collaboration, ownership
+- Employment terms: full-time, contract, internship, senior, junior
+
+Keywords must be things a recruiter would search for in a resume. If unsure, leave it out.
 Output JSON matching the schema. No prose, no markdown fences.`;
 
 const QUAL_CHECK_SYSTEM =
@@ -101,23 +114,56 @@ function rewriteBulletsSchema(n) {
   };
 }
 
+// JD boilerplate that should never count as a "skill gap" — perks, generic fields, soft skills.
+const NOISE_KEYWORDS = new Set([
+  // perks / benefits
+  "salary","benefits","vacation","vacation days","pto","paid time off","equity","stock options",
+  "healthcare","health insurance","dental","vision","401k","rrsp","perks","bonus","retirement",
+  "parental leave","sick leave","wellness","gym","commuter","food","snacks","catered",
+  // employment / location
+  "remote","hybrid","onsite","in-office","full-time","part-time","contract","contractor",
+  "internship","intern","permanent","temporary","relocation","visa","sponsorship",
+  // learning / culture boilerplate
+  "e-learning","e-learnings","learning opportunities","development opportunities","career growth",
+  "career development","mentorship","training","onboarding","work-life balance","culture",
+  "diverse","diversity","inclusion","equal opportunity",
+  // generic fields
+  "engineering","software","data","technology","tech","quantitative","quantitative field",
+  "field","role","team","teamwork","work","business","industry","experience","skills",
+  "knowledge","background","domain","ecosystem","environment","platform","product","project",
+  // soft skills / vague
+  "communication","leadership","collaboration","ownership","initiative","problem solving",
+  "problem-solving","analytical","detail-oriented","passionate","motivated","driven","fast-paced",
+  // levels
+  "senior","junior","mid","mid-level","staff","principal","entry-level","new grad","graduate"
+]);
+
+function isNoise(kw) {
+  return NOISE_KEYWORDS.has(kw.toLowerCase().trim());
+}
+
+function filterNoise(keywords) {
+  return keywords.filter(k => !isNoise(k));
+}
+
 // Fit gap: keywords from JD not present in resume text. Pure string ops, no model needed.
 function fitGap(jdKeywords, resumeText) {
+  const clean = filterNoise(jdKeywords);
   const haystack = resumeText.toLowerCase();
   const missing = [];
   const present = [];
-  for (const kw of jdKeywords) {
+  for (const kw of clean) {
     const needle = kw.toLowerCase().trim();
     if (!needle) continue;
     if (haystack.includes(needle)) present.push(kw);
     else missing.push(kw);
   }
-  return { present, missing, coverage: present.length / Math.max(1, jdKeywords.length) };
+  return { present, missing, coverage: present.length / Math.max(1, clean.length) };
 }
 
 window.PROMPTS = {
   CLASSIFY_SYSTEM, REWRITE_BULLETS_SYSTEM, QUAL_CHECK_SYSTEM,
   classifyUser, rewriteBulletsUser, qualCheckUser,
   classifySchema, rewriteBulletsSchema, qualCheckSchema,
-  fitGap
+  fitGap, filterNoise, isNoise, NOISE_KEYWORDS
 };

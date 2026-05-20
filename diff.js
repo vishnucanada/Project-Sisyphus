@@ -57,4 +57,25 @@ function renderDiffHTML(original, rewritten) {
   }).join("");
 }
 
-window.DIFF = { wordDiff, renderDiffHTML };
+// Side-by-side: returns {leftHTML, rightHTML}.
+// Left = original, with words that got removed marked with .diff-del.
+// Right = rewritten, with words that got added marked with .diff-add.
+// Whitespace tokens render plain on both sides (no double-highlighting of spaces).
+function renderDiffSideBySide(original, rewritten) {
+  if (!rewritten || rewritten === original) {
+    const safe = escapeHTML(original || "");
+    return { leftHTML: safe, rightHTML: safe };
+  }
+  const parts = wordDiff(original, rewritten);
+  let left = "", right = "";
+  for (const p of parts) {
+    const v = escapeHTML(p.value);
+    const isWS = /^\s+$/.test(p.value);
+    if (p.type === "same") { left += v; right += v; }
+    else if (p.type === "del") { left += isWS ? v : `<span class="diff-del">${v}</span>`; }
+    else if (p.type === "add") { right += isWS ? v : `<span class="diff-add">${v}</span>`; }
+  }
+  return { leftHTML: left, rightHTML: right };
+}
+
+window.DIFF = { wordDiff, renderDiffHTML, renderDiffSideBySide };
