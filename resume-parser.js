@@ -81,4 +81,4 @@ function serializeBlocks(blocks) {
   return lines.join("\n");
 }
 
-window.RESUME_PARSER = { parseResume, groupBulletsBySection, serializeBlocks };
+window.RESUME_PARSER = { parseResume, groupBulletsBySection, serializeBlocks, isProtected, PROTECTED_SECTIONS };

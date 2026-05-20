@@ -39,6 +39,14 @@ window.MODEL = {
     return obj;
   },
 
+  async checkQualification(jd, resumeText) {
+    const s = await getSession(PROMPTS.QUAL_CHECK_SYSTEM);
+    const raw = await s.prompt(PROMPTS.qualCheckUser(jd, resumeText), {
+      responseConstraint: PROMPTS.qualCheckSchema()
+    });
+    return JSON.parse(raw);
+  },
+
   async rewriteBullets({ jd, keywords, sectionTitle, subheading, bullets, onProgress }) {
     const n = bullets.length;
     if (n === 0) return [];

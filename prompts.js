@@ -4,6 +4,22 @@ const CLASSIFY_SYSTEM =
 `You classify a job description into ONE label from a provided list, and extract keywords.
 Output JSON matching the schema. No prose, no markdown fences.`;
 
+const QUAL_CHECK_SYSTEM =
+`You decide whether a candidate is plausibly qualified for a specific job, based on their resume and the job description.
+
+Decision criteria — focus on HARD requirements:
+- Years of experience required vs candidate's actual experience (internships count partially).
+- Seniority level (intern / junior / mid / senior / staff / principal). A new grad cannot be senior.
+- Required credentials (degree level, certifications, security clearance).
+- Hard-skill must-haves explicitly stated as required (not "nice to have").
+
+Verdicts:
+- "qualified": candidate clearly meets the bar.
+- "stretch": candidate is close but missing 1-2 things; worth applying.
+- "underqualified": candidate is missing core requirements (e.g. years/seniority gap > 2x, missing mandatory degree/clearance, or a senior role applied to by a new grad).
+
+Output JSON only. Be conservative — if a JD says "5+ years" and resume shows 1 year, that is underqualified.`;
+
 const REWRITE_BULLETS_SYSTEM =
 `You tailor resume bullets to a job description. You will receive an ARRAY of original bullets
 and must return an ARRAY of the same length with tailored versions.
@@ -23,6 +39,31 @@ Return JSON {"label": "...", "confidence": 0..1, "keywords": ["k1",...]}
 
 Job description:
 ${jd.slice(0, 4000)}`;
+}
+
+function qualCheckUser(jd, resumeText) {
+  return `Job description:
+${jd.slice(0, 3500)}
+
+Candidate resume:
+${resumeText.slice(0, 3500)}
+
+Return JSON: {"verdict": "qualified"|"stretch"|"underqualified", "reasoning": "...", "missing": ["..."], "candidate_summary": "X years, level Y", "role_summary": "Senior/mid/etc, requires Z years"}`;
+}
+
+function qualCheckSchema() {
+  return {
+    type: "object",
+    required: ["verdict", "reasoning"],
+    additionalProperties: false,
+    properties: {
+      verdict: { type: "string", enum: ["qualified", "stretch", "underqualified"] },
+      reasoning: { type: "string" },
+      missing: { type: "array", items: { type: "string" }, maxItems: 6 },
+      candidate_summary: { type: "string" },
+      role_summary: { type: "string" }
+    }
+  };
 }
 
 function rewriteBulletsUser({ jd, keywords, sectionTitle, subheading, bullets }) {
@@ -75,8 +116,8 @@ function fitGap(jdKeywords, resumeText) {
 }
 
 window.PROMPTS = {
-  CLASSIFY_SYSTEM, REWRITE_BULLETS_SYSTEM,
-  classifyUser, rewriteBulletsUser,
-  classifySchema, rewriteBulletsSchema,
+  CLASSIFY_SYSTEM, REWRITE_BULLETS_SYSTEM, QUAL_CHECK_SYSTEM,
+  classifyUser, rewriteBulletsUser, qualCheckUser,
+  classifySchema, rewriteBulletsSchema, qualCheckSchema,
   fitGap
 };

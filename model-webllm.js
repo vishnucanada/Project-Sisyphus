@@ -69,6 +69,15 @@ window.MODEL = {
     return obj;
   },
 
+  async checkQualification(jd, resumeText) {
+    const raw = await chat({
+      system: PROMPTS.QUAL_CHECK_SYSTEM,
+      user: PROMPTS.qualCheckUser(jd, resumeText),
+      schema: PROMPTS.qualCheckSchema()
+    });
+    return JSON.parse(raw);
+  },
+
   // Rewrite all bullets in a single section. Returns array of same length as `bullets`.
   // Optionally validates and retries once if fabrication detected.
   async rewriteBullets({ jd, keywords, sectionTitle, subheading, bullets, onProgress }) {
