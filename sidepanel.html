@@ -4,36 +4,68 @@
   <meta charset="utf-8" />
   <title>Resume Tailor</title>
   <link rel="stylesheet" href="sidepanel.css" />
+  <style>
+    .tabs { display: flex; gap: 4px; margin: 8px 0; }
+    .tab { padding: 4px 10px; cursor: pointer; border: 1px solid #ddd; border-radius: 4px; background: #f6f6f6; }
+    .tab.active { background: #fff; border-color: #888; font-weight: 600; }
+    .panel { display: none; } .panel.active { display: block; }
+    .diffrow { display: grid; grid-template-columns: 20px 1fr; gap: 6px; padding: 6px 0; border-top: 1px solid #eee; }
+    .diffrow .orig { color: #888; font-size: 11px; }
+    .diffrow .tail { color: #111; font-size: 12px; }
+    .diffrow.rejected .tail { text-decoration: line-through; opacity: 0.5; }
+    .badge-flag { background: #fee; color: #900; padding: 1px 4px; border-radius: 3px; font-size: 10px; }
+    .section-title { font-weight: 600; margin: 10px 0 2px; font-size: 11px; text-transform: uppercase; color: #555; }
+    .pill { display: inline-block; padding: 1px 5px; border-radius: 8px; background: #eef; margin: 1px; font-size: 10px; }
+    .pill.missing { background: #fee; color: #900; }
+    .pill.present { background: #efe; color: #060; }
+    .hist-row { padding: 6px 0; border-top: 1px solid #eee; font-size: 11px; }
+    .hist-row .meta { color: #888; }
+  </style>
 </head>
 <body>
   <header>
     <h1>Resume Tailor</h1>
-    <button id="tailorBtn">Tailor for this page</button>
+    <button id="tailorBtn">Tailor</button>
   </header>
 
   <section id="status"></section>
 
-  <section id="result" hidden>
-    <h2>Matched variant: <span id="variantLabel"></span></h2>
-    <details open>
-      <summary>Extracted keywords</summary>
-      <ul id="keywords"></ul>
-    </details>
-    <h3>Tailored resume (markdown)</h3>
-    <textarea id="tailored" rows="24" spellcheck="false"></textarea>
-    <button id="copyBtn">Copy</button>
+  <div class="tabs">
+    <div class="tab active" data-tab="result">Result</div>
+    <div class="tab" data-tab="history">History</div>
+    <div class="tab" data-tab="variants">Variants</div>
+  </div>
+
+  <section class="panel active" id="panel-result">
+    <div id="matchSummary"></div>
+    <h3>Fit gap</h3>
+    <div id="fitgap"></div>
+    <h3>Bullet diff</h3>
+    <div id="diff"></div>
+    <p>
+      <button id="copyBtn">Copy markdown</button>
+      <button id="docxBtn">Download .docx</button>
+      <button id="saveBtn">Save to history</button>
+    </p>
   </section>
 
-  <hr />
-  <details>
-    <summary>Edit resume variants</summary>
-    <textarea id="variants" rows="14" spellcheck="false"
-      placeholder='{"backend": "...markdown...", "ml": "...", "frontend": "..."}'></textarea>
-    <button id="saveBtn">Save variants</button>
-  </details>
+  <section class="panel" id="panel-history">
+    <p><button id="clearHistBtn">Clear all</button></p>
+    <div id="history"></div>
+  </section>
+
+  <section class="panel" id="panel-variants">
+    <textarea id="variants" rows="20" spellcheck="false"></textarea>
+    <p><button id="saveVarsBtn">Save variants</button></p>
+  </section>
 
   <script src="prompts.js"></script>
+  <script src="resume-parser.js"></script>
+  <script src="validator.js"></script>
+  <script src="resumes.js"></script>
+  <script src="applications.js"></script>
   <script src="model-gemini.js"></script>
+  <script type="module" src="docx-export.js"></script>
   <script src="sidepanel.js"></script>
 </body>
 </html>
