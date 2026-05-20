@@ -1,35 +1,39 @@
-// Prompt definitions only — no model implementation.
-// Backends live in model-gemini.js and model-webllm.js and both expose window.MODEL
-// with the same surface: available(), warm(), classify(), rewriteStreaming(), destroyAll().
+// Prompt definitions and JSON schemas only — no model implementation.
 
 const CLASSIFY_SYSTEM =
-`You classify job descriptions into ONE label from a provided list.
-Also extract up to 10 high-signal keywords (skills, tools, domains) from the JD, lowercase, no duplicates.
-You MUST output valid JSON matching the schema. No prose, no markdown fences.`;
+`You classify a job description into ONE label from a provided list, and extract keywords.
+Output JSON matching the schema. No prose, no markdown fences.`;
 
-const REWRITE_SYSTEM =
-`You tailor a resume to a specific job by editing existing bullets to surface relevant keywords.
-Rules:
-- NEVER fabricate experience, employers, dates, numbers, or skills not in the original.
-- You MAY rephrase, reorder, and substitute synonyms to match JD terminology.
-- Keep the section structure of the input resume.
-- Output ONLY the full tailored resume in markdown. No preamble, no explanation.`;
+const REWRITE_BULLETS_SYSTEM =
+`You tailor resume bullets to a job description. You will receive an ARRAY of original bullets
+and must return an ARRAY of the same length with tailored versions.
+
+HARD RULES:
+- Output array length MUST equal input array length. One tailored bullet per original.
+- NEVER fabricate. Do not introduce skills, tools, technologies, employers, dates, or numbers
+  that are not in the original bullet. You MAY use JD keywords ONLY if they describe the same
+  thing the original already mentions (synonym substitution).
+- You MAY rephrase, reorder words, and tighten language. Preserve all numeric metrics exactly.
+- If a bullet is already well-aligned with the JD, return it unchanged.
+- Output JSON: {"tailored": ["bullet1", "bullet2", ...]}`;
 
 function classifyUser(jd, labels) {
   return `Labels: ${labels.join(", ")}
-Job description:
-${jd.slice(0, 4000)}
+Return JSON {"label": "...", "confidence": 0..1, "keywords": ["k1",...]}
 
-Return JSON: {"label": "<one of the labels>", "confidence": 0-1, "keywords": ["k1", ...]}`;
+Job description:
+${jd.slice(0, 4000)}`;
 }
 
-function rewriteUser(resumeMd, jd, keywords) {
-  return `Target keywords (incorporate naturally where truthful): ${keywords.join(", ")}
-Job description:
-${jd.slice(0, 2500)}
+function rewriteBulletsUser({ jd, keywords, sectionTitle, subheading, bullets }) {
+  return `Section: ${sectionTitle}${subheading ? "\n" + subheading : ""}
+Target JD keywords (use only as synonyms for things already present): ${keywords.join(", ")}
 
-Original resume:
-${resumeMd}`;
+Job description (for tone/terminology only):
+${jd.slice(0, 1500)}
+
+Original bullets (rewrite each, preserve all numbers exactly, output array of same length):
+${JSON.stringify(bullets.map(b => b.original), null, 2)}`;
 }
 
 function classifySchema(labels) {
@@ -45,5 +49,34 @@ function classifySchema(labels) {
   };
 }
 
-// Expose globally for non-module scripts.
-window.PROMPTS = { CLASSIFY_SYSTEM, REWRITE_SYSTEM, classifyUser, rewriteUser, classifySchema };
+function rewriteBulletsSchema(n) {
+  return {
+    type: "object",
+    required: ["tailored"],
+    additionalProperties: false,
+    properties: {
+      tailored: { type: "array", items: { type: "string" }, minItems: n, maxItems: n }
+    }
+  };
+}
+
+// Fit gap: keywords from JD not present in resume text. Pure string ops, no model needed.
+function fitGap(jdKeywords, resumeText) {
+  const haystack = resumeText.toLowerCase();
+  const missing = [];
+  const present = [];
+  for (const kw of jdKeywords) {
+    const needle = kw.toLowerCase().trim();
+    if (!needle) continue;
+    if (haystack.includes(needle)) present.push(kw);
+    else missing.push(kw);
+  }
+  return { present, missing, coverage: present.length / Math.max(1, jdKeywords.length) };
+}
+
+window.PROMPTS = {
+  CLASSIFY_SYSTEM, REWRITE_BULLETS_SYSTEM,
+  classifyUser, rewriteBulletsUser,
+  classifySchema, rewriteBulletsSchema,
+  fitGap
+};
