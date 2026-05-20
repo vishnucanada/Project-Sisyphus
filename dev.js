@@ -14,7 +14,20 @@ $("jd").value = "We're hiring a backend engineer to scale our Go services on Pos
   const a = await MODEL.available();
   $("diag").textContent = `Prompt API: ${a}`;
   log(`availability = ${a}`);
-  if (a !== "available") log(`(open chrome://components and trigger "Optimization Guide On Device Model" if needed)`);
+  if (a === "downloadable" || a === "downloading") {
+    log("triggering model download (~2GB on first run)…");
+    try {
+      await MODEL.warm((loaded) => {
+        const pct = Math.round(loaded * 100);
+        $("diag").textContent = `Downloading: ${pct}%`;
+        log(`  download ${pct}%`);
+      });
+      $("diag").textContent = "Prompt API: available";
+      log("download complete — ready.");
+    } catch (e) {
+      log("download failed: " + e.message);
+    }
+  }
 })();
 
 async function run({ rewriteToo }) {

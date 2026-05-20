@@ -34,6 +34,8 @@ async function getSession(systemPrompt, monitor) {
   if (_sessions.has(systemPrompt)) return _sessions.get(systemPrompt);
   const s = await LanguageModel.create({
     initialPrompts: [{ role: "system", content: systemPrompt }],
+    expectedInputs: [{ type: "text", languages: ["en"] }],
+    expectedOutputs: [{ type: "text", languages: ["en"] }],
     monitor
   });
   _sessions.set(systemPrompt, s);
@@ -87,8 +89,14 @@ const MODEL = {
   },
 
   // Convenience: pre-warm the model so the first user click isn't slow.
+  // Triggers the ~2GB Gemini Nano weights download on first run.
   async warm(onDownloadProgress) {
-    await LanguageModel.create({ monitor: downloadMonitor(onDownloadProgress) });
+    const s = await LanguageModel.create({
+      expectedInputs: [{ type: "text", languages: ["en"] }],
+      expectedOutputs: [{ type: "text", languages: ["en"] }],
+      monitor: downloadMonitor(onDownloadProgress)
+    });
+    s.destroy?.();
   },
 
   // Free GPU memory if needed.
