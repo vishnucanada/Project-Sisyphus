@@ -1,0 +1,38 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Resume Tailor</title>
+  <link rel="stylesheet" href="sidepanel.css" />
+</head>
+<body>
+  <header>
+    <h1>Resume Tailor</h1>
+    <button id="tailorBtn">Tailor for this page</button>
+  </header>
+
+  <section id="status"></section>
+
+  <section id="result" hidden>
+    <h2>Matched variant: <span id="variantLabel"></span></h2>
+    <details open>
+      <summary>Extracted keywords</summary>
+      <ul id="keywords"></ul>
+    </details>
+    <h3>Tailored resume (markdown)</h3>
+    <textarea id="tailored" rows="24" spellcheck="false"></textarea>
+    <button id="copyBtn">Copy</button>
+  </section>
+
+  <hr />
+  <details>
+    <summary>Edit resume variants</summary>
+    <textarea id="variants" rows="14" spellcheck="false"
+      placeholder='{"backend": "...markdown...", "ml": "...", "frontend": "..."}'></textarea>
+    <button id="saveBtn">Save variants</button>
+  </details>
+
+  <script src="prompts.js"></script>
+  <script src="sidepanel.js"></script>
+</body>
+</html>
