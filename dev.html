@@ -10,12 +10,22 @@
     .badge { padding: 2px 6px; border-radius: 4px; background: #eef; font-size: 11px; }
     #log { background: #111; color: #0f0; padding: 8px; height: 120px; overflow: auto;
            font-family: ui-monospace, monospace; font-size: 11px; white-space: pre-wrap; }
-    .diffrow { display: grid; grid-template-columns: 24px 1fr 1fr; gap: 8px;
+    .diffrow { display: grid; grid-template-columns: 24px 1fr; gap: 8px;
                border-top: 1px solid #eee; padding: 8px 0; align-items: start; }
-    .diffrow .orig { color: #777; }
-    .diffrow .tail { color: #111; }
+    .diffrow .orig { color: #888; font-size: 11px; margin-bottom: 4px; }
+    .diffrow .tail { color: #111; line-height: 1.5; cursor: text; padding: 2px 4px; border-radius: 3px; }
+    .diffrow .tail:hover { background: #fafafa; }
     .diffrow.rejected .tail { text-decoration: line-through; opacity: 0.5; }
-    .diffrow .badge-flag { background: #fee; color: #900; }
+    .diffrow .tail textarea { width: 100%; font-family: inherit; font-size: inherit; line-height: inherit; }
+    .diffrow.protected .tail { background: #f5f5f5; color: #666; cursor: not-allowed; }
+    .diff-same { color: #555; }
+    .diff-add { background: #d6f5d6; color: #064; text-decoration: none; }
+    .diff-del { background: #ffd6d6; color: #800; text-decoration: line-through; }
+    .badge-flag { background: #fee; color: #900; padding: 1px 6px; border-radius: 3px; font-size: 10px; }
+    .qual-banner { padding: 10px 12px; border-radius: 6px; margin: 8px 0; }
+    .qual-qualified { background: #efe; color: #060; }
+    .qual-stretch { background: #ffd; color: #850; }
+    .qual-underqualified { background: #fee; color: #900; border: 1px solid #f88; }
     .section-title { font-weight: 600; margin: 16px 0 4px; color: #333; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
     #fitgap ul { columns: 2; }
     #fitgap .missing li { color: #b00; }
@@ -49,8 +59,11 @@
     <button id="matchBtn">Match only (embeddings)</button>
     <button id="exportMdBtn">Copy markdown</button>
     <button id="exportDocxBtn">Download .docx</button>
+    <label><input type="checkbox" id="overrideQualBtn"> Override qualification block</label>
     <span id="timings"></span>
   </p>
+
+  <div id="qualBanner"></div>
 
   <h3>Log</h3>
   <pre id="log"></pre>
@@ -72,6 +85,7 @@
   <script src="prompts.js"></script>
   <script src="resume-parser.js"></script>
   <script src="validator.js"></script>
+  <script src="diff.js"></script>
   <script src="resumes.js"></script>
   <script type="module" src="model-webllm.js"></script>
   <script type="module" src="model-embeddings.js"></script>

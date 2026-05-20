@@ -89,6 +89,19 @@ Requirements:
 - Familiarity with edge/embedded constraints
 - Bonus: experience with signal processing, wireless, or telemetry domains`,
 
+  senior_role: `Senior Machine Learning Engineer — 7+ years required
+
+We're hiring a senior ML engineer to lead our edge inference platform. You will own the model optimization roadmap, mentor a team of 4 ML engineers, and partner with product leadership on multi-quarter strategy.
+
+Requirements:
+- 7+ years of professional ML engineering experience (internships do not count)
+- 2+ years leading or mentoring engineers
+- Shipped production ML systems at scale (millions of requests/day)
+- Deep expertise in model compression, quantization, and embedded deployment
+- Strong communication with executive stakeholders
+
+This is not an entry-level role. We are not considering new graduates.`,
+
   research_role: `Research Scientist — Wireless Machine Learning
 
 We're a research team publishing at top venues (NeurIPS, ICML, IEEE ICC/SECON) on machine learning for next-generation wireless systems. Looking for a researcher to lead investigations into physical-layer learning, channel modeling, and edge inference.

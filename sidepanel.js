@@ -3,13 +3,13 @@ const status = (msg) => { $("status").textContent = msg; };
 
 let CURRENT_BLOCKS = null;
 let CURRENT_META = null;
+let CURRENT_KEYWORDS = [];
 
 async function loadVariants() {
   const { variants } = await chrome.storage.local.get("variants");
   return variants || window.RESUMES;
 }
 
-// Tab switching
 document.querySelectorAll(".tab").forEach(t => t.addEventListener("click", () => {
   document.querySelectorAll(".tab").forEach(x => x.classList.toggle("active", x === t));
   document.querySelectorAll(".panel").forEach(p => p.classList.toggle("active", p.id === "panel-" + t.dataset.tab));
@@ -35,22 +35,79 @@ $("saveVarsBtn").addEventListener("click", async () => {
   } catch (e) { status("Invalid JSON: " + e.message); }
 });
 
-// Simple cosine on token overlap as a no-embedding fallback for variant matching.
 function tokenSim(a, b) {
   const ta = new Set(a.toLowerCase().match(/[a-z][a-z0-9+./-]{2,}/g) || []);
   const tb = new Set(b.toLowerCase().match(/[a-z][a-z0-9+./-]{2,}/g) || []);
   let inter = 0;
   for (const t of ta) if (tb.has(t)) inter++;
-  const denom = Math.sqrt(ta.size * tb.size) || 1;
-  return inter / denom;
+  return inter / (Math.sqrt(ta.size * tb.size) || 1);
 }
 
 function matchVariantLocal(jd, variants) {
   const scores = Object.entries(variants).map(([label, text]) => ({ label, score: tokenSim(jd, text) }))
     .sort((a, b) => b.score - a.score);
   const top = scores[0], next = scores[1] || { score: 0 };
-  const confidence = Math.min(1, Math.max(0, (top.score - next.score) * 5 + 0.5));
-  return { label: top.label, confidence, scores };
+  return { label: top.label, confidence: Math.min(1, Math.max(0, (top.score - next.score) * 5 + 0.5)), scores };
+}
+
+function renderQual(q) {
+  const cls = "qual-" + q.verdict;
+  $("qualBanner").innerHTML = `
+    <div class="qual-banner ${cls}">
+      <strong>${q.verdict.toUpperCase()}</strong> — ${q.reasoning}
+      ${q.missing?.length ? `<br><em>Missing:</em> ${q.missing.join("; ")}` : ""}
+    </div>`;
+}
+
+function renderBulletRow(b, sectionProtected, jdKeywords) {
+  const row = document.createElement("div");
+  row.className = "diffrow" + (sectionProtected ? " protected" : "");
+
+  const cb = document.createElement("input");
+  cb.type = "checkbox"; cb.checked = b.accepted; cb.disabled = sectionProtected;
+  cb.addEventListener("change", () => { b.accepted = cb.checked; row.classList.toggle("rejected", !cb.checked); });
+
+  const stack = document.createElement("div");
+  const orig = document.createElement("div");
+  orig.className = "orig"; orig.textContent = "original: " + b.original;
+  stack.appendChild(orig);
+
+  const tail = document.createElement("div");
+  tail.className = "tail";
+  tail.title = sectionProtected ? "Protected — not modified" : "Click to edit";
+
+  const renderTail = () => {
+    if (sectionProtected || !b.tailored || b.tailored === b.original) {
+      const safe = b.original.replace(/[<>&]/g, c => ({ "<":"&lt;",">":"&gt;","&":"&amp;" }[c]));
+      tail.innerHTML = `<span class="diff-same">${safe}</span>`;
+    } else {
+      tail.innerHTML = DIFF.renderDiffHTML(b.original, b.tailored);
+      const v = VALIDATOR.validateBullet({ original: b.original, rewrite: b.tailored, allowedExtras: jdKeywords });
+      if (!v.ok) {
+        const flag = document.createElement("span");
+        flag.className = "badge-flag"; flag.textContent = " ⚠ " + v.reasonText;
+        tail.appendChild(flag);
+      }
+    }
+  };
+
+  tail.addEventListener("click", () => {
+    if (sectionProtected) return;
+    const ta = document.createElement("textarea");
+    ta.value = b.tailored ?? b.original;
+    ta.rows = Math.max(2, Math.ceil(ta.value.length / 50));
+    tail.innerHTML = ""; tail.appendChild(ta); ta.focus();
+    ta.addEventListener("blur", () => { b.tailored = ta.value.trim(); renderTail(); });
+    ta.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); ta.blur(); }
+      if (e.key === "Escape") { ta.value = b.tailored ?? b.original; ta.blur(); }
+    });
+  });
+
+  renderTail();
+  stack.appendChild(tail);
+  row.append(cb, stack);
+  return row;
 }
 
 function renderDiff(blocks, jdKeywords) {
@@ -58,32 +115,9 @@ function renderDiff(blocks, jdKeywords) {
   for (const sec of RESUME_PARSER.groupBulletsBySection(blocks)) {
     const h = document.createElement("div");
     h.className = "section-title";
-    h.textContent = sec.section + (sec.subheading ? " — " + sec.subheading.replace(/\*\*/g, "") : "");
+    h.textContent = sec.section + (sec.subheading ? " — " + sec.subheading.replace(/\*\*/g, "") : "") + (sec.protected ? " (protected)" : "");
     root.appendChild(h);
-
-    for (const b of sec.bullets) {
-      const row = document.createElement("div");
-      row.className = "diffrow";
-      const cb = document.createElement("input");
-      cb.type = "checkbox"; cb.checked = b.accepted;
-      cb.addEventListener("change", () => { b.accepted = cb.checked; row.classList.toggle("rejected", !cb.checked); });
-
-      const stack = document.createElement("div");
-      const orig = document.createElement("div"); orig.className = "orig"; orig.textContent = b.original;
-      const tail = document.createElement("div"); tail.className = "tail";
-      if (!b.tailored || b.tailored === b.original) tail.innerHTML = "<em style='color:#888'>unchanged</em>";
-      else {
-        tail.textContent = b.tailored;
-        const v = VALIDATOR.validateBullet({ original: b.original, rewrite: b.tailored, allowedExtras: jdKeywords });
-        if (!v.ok) {
-          const f = document.createElement("span"); f.className = "badge-flag"; f.textContent = " ⚠ " + v.reasonText;
-          tail.appendChild(f);
-        }
-      }
-      stack.append(orig, tail);
-      row.append(cb, stack);
-      root.appendChild(row);
-    }
+    for (const b of sec.bullets) root.appendChild(renderBulletRow(b, sec.protected, jdKeywords));
   }
 }
 
@@ -103,8 +137,7 @@ async function renderHistory() {
       <strong>${it.company || "?"}</strong> — ${it.role || "?"} · <span class="meta">${it.variant} · ${new Date(it.savedAt).toLocaleString()}</span><br>
       <span class="meta">${it.url || ""}</span>
       <button data-id="${it.id}" class="del">delete</button>
-    </div>
-  `).join("");
+    </div>`).join("");
   root.querySelectorAll(".del").forEach(b => b.addEventListener("click", async () => {
     await HISTORY.deleteApplication(b.dataset.id); renderHistory();
   }));
@@ -115,25 +148,40 @@ $("clearHistBtn").addEventListener("click", async () => {
 });
 
 $("tailorBtn").addEventListener("click", async () => {
-  $("diff").innerHTML = ""; $("fitgap").innerHTML = ""; CURRENT_BLOCKS = null;
+  $("diff").innerHTML = ""; $("fitgap").innerHTML = ""; $("qualBanner").innerHTML = "";
+  CURRENT_BLOCKS = null;
+
   status("Scraping JD…");
   const variants = await loadVariants();
   const scrape = await chrome.runtime.sendMessage({ type: "SCRAPE_JD" });
   if (!scrape?.ok || !scrape.text) return status("Failed to scrape page.");
   status(`Scraped ${scrape.site} · ${scrape.text.length} chars.`);
 
-  // Variant match: token-overlap fallback (no Transformers.js in extension yet).
   const match = matchVariantLocal(scrape.text, variants);
   $("matchSummary").innerHTML = `Matched <strong>${match.label}</strong> · confidence ${(match.confidence * 100).toFixed(0)}%`;
+  const resumeText = variants[match.label];
+
+  status("Checking qualifications…");
+  let qual;
+  try { qual = await MODEL.checkQualification(scrape.text, resumeText); renderQual(qual); }
+  catch (e) { status("Qual check failed (continuing): " + e.message); }
+  if (qual?.verdict === "underqualified" && !$("overrideQualBtn").checked) {
+    return status("BLOCKED — underqualified. Tick override to proceed.");
+  }
 
   status("Extracting JD keywords…");
   const cls = await MODEL.classify(scrape.text, Object.keys(variants));
-  const resumeText = variants[match.label];
+  CURRENT_KEYWORDS = cls.keywords;
   renderFitGap(PROMPTS.fitGap(cls.keywords, resumeText));
 
   const blocks = RESUME_PARSER.parseResume(resumeText);
   const sections = RESUME_PARSER.groupBulletsBySection(blocks);
   for (const sec of sections) {
+    if (sec.protected) {
+      sec.bullets.forEach(b => { b.tailored = b.original; });
+      renderDiff(blocks, cls.keywords);
+      continue;
+    }
     status(`Rewriting: ${sec.section} (${sec.bullets.length})…`);
     try {
       const tailored = await MODEL.rewriteBullets({
@@ -153,7 +201,8 @@ $("tailorBtn").addEventListener("click", async () => {
   CURRENT_META = {
     url: scrape.url, site: scrape.site,
     company: scrape.company || "", role: scrape.title || "",
-    variant: match.label, keywords: cls.keywords
+    variant: match.label, keywords: cls.keywords,
+    qualVerdict: qual?.verdict || "unknown"
   };
   status("Done.");
 });
@@ -180,7 +229,7 @@ $("saveBtn").addEventListener("click", async () => {
     acceptedBullets: accepted, totalBullets: total,
     markdown: RESUME_PARSER.serializeBlocks(CURRENT_BLOCKS)
   });
-  status(`Saved (${accepted}/${total} bullets accepted).`);
+  status(`Saved (${accepted}/${total} accepted).`);
 });
 
 init();

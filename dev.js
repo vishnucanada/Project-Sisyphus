@@ -1,7 +1,8 @@
 const $ = (id) => document.getElementById(id);
 const log = (msg) => { $("log").textContent += msg + "\n"; $("log").scrollTop = 1e9; };
 
-let CURRENT_BLOCKS = null; // last tailored blocks (for export)
+let CURRENT_BLOCKS = null;
+let CURRENT_KEYWORDS = [];
 
 $("variants").value = JSON.stringify(window.RESUMES, null, 2);
 for (const [key, jd] of Object.entries(window.SAMPLE_JDS)) {
@@ -23,34 +24,28 @@ async function waitFor(key, timeoutMs = 8000) {
 (async () => {
   try { await Promise.all([waitFor("MODEL"), waitFor("EMBEDDINGS")]); }
   catch (e) { log("init: " + e.message); return; }
-
   log(`backend = ${MODEL.name}`);
   const a = await MODEL.available();
   $("diag").textContent = `LLM: ${a}`;
-
   if (a === "downloadable" || a === "downloading") {
-    log("warming LLM (first run downloads ~1.8GB)…");
+    log("warming LLM…");
     await MODEL.warm((loaded, text) => {
-      const pct = Math.round(loaded * 100);
-      $("diag").textContent = `LLM: ${pct}%`;
-      if (text) log(`  ${text}`);
+      $("diag").textContent = `LLM: ${Math.round(loaded * 100)}%`;
+      if (text) log("  " + text);
     }).catch(e => log("LLM warm failed: " + e.message));
     $("diag").textContent = "LLM: available";
   }
-
-  log("warming embedding model (~25MB)…");
+  log("warming embedding model…");
   $("embDiag").textContent = "emb: loading";
-  await EMBEDDINGS.warm((p) => {
-    if (p?.progress != null) $("embDiag").textContent = `emb: ${Math.round(p.progress)}%`;
-  }).catch(e => log("emb warm failed: " + e.message));
+  await EMBEDDINGS.warm((p) => { if (p?.progress != null) $("embDiag").textContent = `emb: ${Math.round(p.progress)}%`; })
+    .catch(e => log("emb warm failed: " + e.message));
   $("embDiag").textContent = "emb: ready";
   log("ready.");
 })();
 
 function renderScores(scores) {
   $("scores").innerHTML = scores.map(s =>
-    `<span class="pill">${s.label}: ${s.score.toFixed(3)}</span>`
-  ).join(" ");
+    `<span class="pill">${s.label}: ${s.score.toFixed(3)}</span>`).join(" ");
 }
 
 function renderFitGap(gap) {
@@ -62,112 +57,159 @@ function renderFitGap(gap) {
     </div>`;
 }
 
+function renderQual(q) {
+  const cls = "qual-" + q.verdict;
+  $("qualBanner").innerHTML = `
+    <div class="qual-banner ${cls}">
+      <strong>${q.verdict.toUpperCase()}</strong> — ${q.reasoning}
+      ${q.missing?.length ? `<br><em>Missing:</em> ${q.missing.join("; ")}` : ""}
+      ${q.candidate_summary || q.role_summary ? `<br><small>${q.candidate_summary || ""}${q.candidate_summary && q.role_summary ? " · " : ""}${q.role_summary || ""}</small>` : ""}
+    </div>`;
+}
+
+function renderBulletRow(b, sectionProtected, jdKeywords) {
+  const row = document.createElement("div");
+  row.className = "diffrow" + (sectionProtected ? " protected" : "");
+
+  const cb = document.createElement("input");
+  cb.type = "checkbox"; cb.checked = b.accepted;
+  cb.disabled = sectionProtected;
+  cb.addEventListener("change", () => { b.accepted = cb.checked; row.classList.toggle("rejected", !cb.checked); });
+
+  const stack = document.createElement("div");
+  const orig = document.createElement("div");
+  orig.className = "orig"; orig.textContent = "original: " + b.original;
+  stack.appendChild(orig);
+
+  const tail = document.createElement("div");
+  tail.className = "tail";
+  tail.title = sectionProtected ? "Protected section — not modified" : "Click to edit";
+
+  const renderTail = () => {
+    if (sectionProtected || !b.tailored || b.tailored === b.original) {
+      tail.innerHTML = `<span class="diff-same">${b.original.replace(/[<>&]/g, c => ({ "<":"&lt;",">":"&gt;","&":"&amp;" }[c]))}</span>`;
+    } else {
+      tail.innerHTML = DIFF.renderDiffHTML(b.original, b.tailored);
+      const v = VALIDATOR.validateBullet({ original: b.original, rewrite: b.tailored, allowedExtras: jdKeywords });
+      if (!v.ok) {
+        const flag = document.createElement("span");
+        flag.className = "badge-flag"; flag.textContent = " ⚠ " + v.reasonText;
+        tail.appendChild(flag);
+      }
+    }
+  };
+
+  // Inline edit on click (unless protected)
+  tail.addEventListener("click", () => {
+    if (sectionProtected) return;
+    const ta = document.createElement("textarea");
+    ta.value = b.tailored ?? b.original;
+    ta.rows = Math.max(2, Math.ceil(ta.value.length / 80));
+    tail.innerHTML = ""; tail.appendChild(ta); ta.focus();
+    const save = () => {
+      b.tailored = ta.value.trim();
+      renderTail();
+    };
+    ta.addEventListener("blur", save);
+    ta.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); ta.blur(); }
+      if (e.key === "Escape") { ta.value = b.tailored ?? b.original; ta.blur(); }
+    });
+  });
+
+  renderTail();
+  stack.appendChild(tail);
+  row.append(cb, stack);
+  return row;
+}
+
 function renderDiff(blocks, jdKeywords) {
-  const container = $("diff");
-  container.innerHTML = "";
-  const sections = RESUME_PARSER.groupBulletsBySection(blocks);
-  for (const sec of sections) {
+  const container = $("diff"); container.innerHTML = "";
+  for (const sec of RESUME_PARSER.groupBulletsBySection(blocks)) {
     const h = document.createElement("div");
     h.className = "section-title";
-    h.textContent = sec.section + (sec.subheading ? " — " + sec.subheading.replace(/\*\*/g, "") : "");
+    h.textContent = sec.section + (sec.subheading ? " — " + sec.subheading.replace(/\*\*/g, "") : "") + (sec.protected ? "  (protected)" : "");
     container.appendChild(h);
-
-    for (const b of sec.bullets) {
-      const row = document.createElement("div");
-      row.className = "diffrow";
-      const cb = document.createElement("input");
-      cb.type = "checkbox"; cb.checked = !!b.accepted;
-      cb.addEventListener("change", () => { b.accepted = cb.checked; row.classList.toggle("rejected", !cb.checked); });
-
-      const orig = document.createElement("div");
-      orig.className = "orig"; orig.textContent = b.original;
-
-      const tail = document.createElement("div");
-      tail.className = "tail";
-      if (b.tailored == null) tail.textContent = "(skipped)";
-      else if (b.tailored === b.original) {
-        tail.innerHTML = `<em style="color:#888">unchanged</em>`;
-      } else {
-        tail.textContent = b.tailored;
-        const v = VALIDATOR.validateBullet({ original: b.original, rewrite: b.tailored, allowedExtras: jdKeywords });
-        if (!v.ok) {
-          const flag = document.createElement("div");
-          flag.className = "badge badge-flag";
-          flag.textContent = "flagged: " + v.reasonText;
-          flag.title = "Click to reject this bullet";
-          tail.appendChild(document.createElement("br"));
-          tail.appendChild(flag);
-        }
-      }
-
-      row.append(cb, orig, tail);
-      container.appendChild(row);
-    }
+    for (const b of sec.bullets) container.appendChild(renderBulletRow(b, sec.protected, jdKeywords));
   }
 }
 
 async function runTailor({ matchOnly }) {
-  $("timings").textContent = "";
-  $("log").textContent = "";
-  $("diff").innerHTML = "";
-  $("fitgap").innerHTML = "";
-  CURRENT_BLOCKS = null;
+  $("timings").textContent = ""; $("log").textContent = "";
+  $("diff").innerHTML = ""; $("fitgap").innerHTML = ""; $("qualBanner").innerHTML = "";
+  CURRENT_BLOCKS = null; CURRENT_KEYWORDS = [];
 
   const variants = JSON.parse($("variants").value);
   const jd = $("jd").value;
-  log(`labels = ${Object.keys(variants).join(", ")}`);
   log(`jd length = ${jd.length} chars`);
 
   let t0 = performance.now();
   log("matching variant (embeddings)…");
   const match = await EMBEDDINGS.matchVariant(jd, variants);
   const matchMs = (performance.now() - t0).toFixed(0);
-  log(`match done in ${matchMs}ms → ${match.label} (conf ${match.confidence.toFixed(2)})`);
+  log(`match → ${match.label} (conf ${match.confidence.toFixed(2)}) in ${matchMs}ms`);
   $("variantLabel").textContent = match.label;
   $("confidence").textContent = `confidence ${(match.confidence * 100).toFixed(0)}%`;
   renderScores(match.scores);
 
-  // Extract JD keywords via LLM (small call, fast).
-  log("extracting JD keywords (LLM)…");
-  t0 = performance.now();
-  const cls = await MODEL.classify(jd, Object.keys(variants));
-  const kwMs = (performance.now() - t0).toFixed(0);
-  log(`keywords (${kwMs}ms): ${cls.keywords.join(", ")}`);
-
   const resumeText = variants[match.label];
-  const gap = PROMPTS.fitGap(cls.keywords, resumeText);
-  renderFitGap(gap);
 
-  if (matchOnly) {
-    $("timings").textContent = `match ${matchMs}ms · kw ${kwMs}ms`;
-    return;
+  // QUALIFICATION GATE
+  log("checking qualifications…");
+  t0 = performance.now();
+  let qual;
+  try { qual = await MODEL.checkQualification(jd, resumeText); }
+  catch (e) { log("qual check failed (continuing): " + e.message); }
+  const qualMs = (performance.now() - t0).toFixed(0);
+  if (qual) {
+    log(`qual: ${qual.verdict} (${qualMs}ms) — ${qual.reasoning}`);
+    renderQual(qual);
+    if (qual.verdict === "underqualified" && !$("overrideQualBtn").checked) {
+      log("STOP: underqualified for this role. Tick 'Override' to proceed anyway.");
+      $("timings").textContent = `match ${matchMs}ms · qual ${qualMs}ms (BLOCKED)`;
+      return;
+    }
   }
 
-  // Parse, rewrite section-by-section, render diff.
+  log("extracting JD keywords…");
+  t0 = performance.now();
+  const cls = await MODEL.classify(jd, Object.keys(variants));
+  CURRENT_KEYWORDS = cls.keywords;
+  const kwMs = (performance.now() - t0).toFixed(0);
+  log(`keywords (${kwMs}ms): ${cls.keywords.join(", ")}`);
+  renderFitGap(PROMPTS.fitGap(cls.keywords, resumeText));
+
+  if (matchOnly) { $("timings").textContent = `match ${matchMs}ms · qual ${qualMs}ms · kw ${kwMs}ms`; return; }
+
   const blocks = RESUME_PARSER.parseResume(resumeText);
   const sections = RESUME_PARSER.groupBulletsBySection(blocks);
   log(`parsed ${blocks.filter(b => b.type === "bullet").length} bullets across ${sections.length} sections.`);
 
   t0 = performance.now();
   for (const sec of sections) {
-    log(`rewriting section: ${sec.section}${sec.subheading ? " / " + sec.subheading.replace(/\*\*/g, "") : ""} (${sec.bullets.length} bullets)`);
+    if (sec.protected) {
+      log(`skip section: ${sec.section} (protected)`);
+      sec.bullets.forEach(b => { b.tailored = b.original; });
+      renderDiff(blocks, cls.keywords);
+      continue;
+    }
+    log(`rewriting: ${sec.section}${sec.subheading ? " / " + sec.subheading.replace(/\*\*/g, "") : ""} (${sec.bullets.length})`);
     try {
       const tailored = await MODEL.rewriteBullets({
         jd, keywords: cls.keywords,
         sectionTitle: sec.section, subheading: sec.subheading,
-        bullets: sec.bullets,
-        onProgress: (full) => { /* could surface partial JSON if desired */ }
+        bullets: sec.bullets
       });
       sec.bullets.forEach((b, i) => { b.tailored = tailored[i] ?? b.original; });
-      renderDiff(blocks, cls.keywords); // re-render incrementally
+      renderDiff(blocks, cls.keywords);
     } catch (e) {
-      log(`  section failed: ${e.message}`);
+      log("  section failed: " + e.message);
       sec.bullets.forEach(b => { b.tailored = b.original; });
     }
   }
   const rewriteMs = (performance.now() - t0).toFixed(0);
   log(`rewrite done in ${rewriteMs}ms`);
-  $("timings").textContent = `match ${matchMs}ms · kw ${kwMs}ms · rewrite ${rewriteMs}ms`;
+  $("timings").textContent = `match ${matchMs}ms · qual ${qualMs}ms · kw ${kwMs}ms · rewrite ${rewriteMs}ms`;
   CURRENT_BLOCKS = blocks;
 }
 
