@@ -1,0 +1,89 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Resume Tailor — Dev</title>
+  <link rel="stylesheet" href="dev.css" />
+</head>
+<body>
+<div class="container">
+
+  <header class="top">
+    <h1>Resume Tailor</h1>
+    <span class="sub">dev harness — runs in a normal tab, no extension reload needed</span>
+    <span class="spacer"></span>
+    <span class="pill" id="diag">LLM: checking…</span>
+    <span class="pill" id="embDiag">Emb: idle</span>
+  </header>
+
+  <section class="card">
+    <h2>1 · Inputs</h2>
+    <div class="row2">
+      <div>
+        <label class="field" for="jd">Job description</label>
+        <textarea id="jd" placeholder="Paste a JD here…"></textarea>
+        <div class="field-group">
+          <label class="field" style="margin:0">Sample</label>
+          <select id="sampleJd"><option value="">— pick one —</option></select>
+        </div>
+      </div>
+      <div>
+        <label class="field" for="variants">Resume variants (JSON)</label>
+        <textarea id="variants"></textarea>
+      </div>
+    </div>
+    <div class="actions" style="margin-top: 14px">
+      <button class="primary" id="runBtn" title="Match variant, check qualifications, fit gap, and rewrite bullets">Analyze &amp; tailor</button>
+      <button id="matchBtn" title="Only match a variant and show fit gap — does not rewrite">Check fit only</button>
+      <label style="font-size: 11px; color: var(--muted)"><input type="checkbox" id="overrideQualBtn" /> Override qual block</label>
+      <label style="font-size: 11px; color: var(--muted)"><input type="checkbox" id="forceRewriteBtn" /> Force rewrite (skip "good enough")</label>
+      <span class="spacer" style="flex:1"></span>
+      <span class="timings" id="timings"></span>
+    </div>
+  </section>
+
+  <section class="card" id="matchCard" hidden>
+    <h2>2 · Match &amp; qualification</h2>
+    <div class="match-line">
+      Matched <strong id="variantLabel">—</strong>
+      <span id="confidence" class="kw present"></span>
+    </div>
+    <div class="scores" id="scores"></div>
+    <div id="qualBanner" style="margin-top: 10px"></div>
+  </section>
+
+  <section class="card" id="fitCard" hidden>
+    <h2>3 · Fit gap</h2>
+    <div id="fitgap"></div>
+    <div id="goodEnough" style="margin-top: 10px"></div>
+  </section>
+
+  <section class="card" id="diffCard" hidden>
+    <h2>4 · Bullet diff <span style="color: var(--muted); text-transform: none; letter-spacing: 0; font-weight: 400">— click right column to edit</span></h2>
+    <div id="diff"></div>
+    <div class="actions" style="margin-top: 14px">
+      <button class="primary" id="previewBtn" title="Open the tailored resume rendered as a real document in a new tab">Preview resume</button>
+      <button id="copyBtn" title="Copies the tailored resume text to clipboard (paste into LinkedIn, Notion, docs)">Copy text</button>
+      <button id="docxBtn" title="Downloads as a Word .docx file with formatting">Download .docx</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Log</h2>
+    <pre id="log"></pre>
+  </section>
+
+</div>
+
+<script src="../src/core/prompts.js"></script>
+<script src="../src/core/resume-parser.js"></script>
+<script src="../src/core/validator.js"></script>
+<script src="../src/core/diff.js"></script>
+<script src="../src/data/resumes.js"></script>
+<script src="../src/lib/preview.js"></script>
+<script type="module" src="../src/models/webllm.js"></script>
+<script type="module" src="../src/models/embeddings.js"></script>
+<script type="module" src="../src/lib/docx.js"></script>
+<script src="dev.js"></script>
+</body>
+</html>

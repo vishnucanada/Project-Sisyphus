@@ -1,5 +1,41 @@
 // Real resume variants for testing. Edit in the dev panel to override at runtime.
 window.RESUMES = {
+  swe: `# Vishnu Garigipati
+Montreal, Canada | (514) 641-0366 | vishnucanada@gmail.com | LinkedIn | GitHub | Website
+
+## Summary
+Computer Science graduate with over 1 year of internship experience across Ericsson and ETS, building backend systems, full-stack applications, and ML infrastructure. Delivered production services handling real-time workflow orchestration pipelines and shipped two open-sourced end-to-end systems. Skilled in Python, Java, and C++ with strong CI/CD and cloud experience. Bilingual: Fluent English and French.
+
+## Education
+**Concordia University, Montreal, Canada** — Jan 2021 – Dec 2025
+Bachelor of Computer Science. Courses: Intro to Software Engineering, Data Structures and Algorithms, Software Processes.
+
+## Experience
+**AI Research Intern, École de Technologie Supérieure — Montreal, Canada** — Jul 2025 – Dec 2025
+- Architected end-to-end ML training, evaluation, and benchmarking infrastructure in PyTorch and TensorFlow; designed physics-based simulation pipelines for large-scale synthetic training data generation.
+- Engineered modular, reproducible experiment framework with clean separation of data generation, model training, and evaluation stages, applying software design principles to a research codebase.
+- Delivered complete system from algorithm design to open-source release; iterated rapidly with faculty in bi-weekly sprint cycles across a 6-month research engagement.
+
+**Machine Learning Intern, Ericsson — Montreal, Canada** — Jan 2024 – Sep 2024
+- Developed and deployed full-stack backend services for autonomous vehicle communication in private 5G networks; reduced end-to-end service latency by 60% through distributed system design and efficient data handling.
+- Designed and shipped intent decomposition system (Python, Prolog, Camunda) translating high-level network policies into automated device-level commands, delivering end-to-end across two product phases.
+- Containerized ML services with Docker and Kubernetes; automated delivery via GitLab CI/CD on AWS and Azure, reducing manual deployment time by 25% and improving release reliability.
+- Applied maximum entropy methods to model network behaviour from limited telemetry; co-authored a patent application and research paper on entropy-based statistical distributions.
+
+## Projects
+**Efficient Neural Constellation Learning for MIMO via Cross-Architecture Distillation** [GitHub]
+- Designed modular knowledge distillation pipeline (CNN teacher to MLP student) with clean separation of data generation, training, and evaluation stages; built for extensibility and reproducibility.
+- Implemented automated benchmarking framework testing across thousands of simulated channel conditions; result storage and analysis pipeline enabled systematic architecture comparisons.
+
+**HCS: Hyperdimensional Computing for Semantic Communication in Object Detection for UAVs** [GitHub]
+- Sole owner of complete software lifecycle: system design, implementation, testing, benchmarking, and open-source release.
+- Built end-to-end data pipeline from raw UAV sensor input to HDC-encoded symbolic representation; designed for compute-constrained edge deployment achieving 75% bandwidth reduction and 20% energy savings.
+
+## Skills
+- **Languages:** Python, Java, C, JavaScript, SQL, Prolog
+- **SWE / Infrastructure:** Docker, Kubernetes, GitLab CI/CD, AWS, Azure, Camunda, REST APIs, Git / GitHub
+- **ML / Data:** PyTorch, TensorFlow, Scikit-Learn, NumPy, Pandas, distributed systems, ETL pipelines`,
+
   ml_engineer: `# Vishnu Garigipati
 Montreal, Canada | (514) 641-0366 | vishnucanada@gmail.com | LinkedIn | GitHub | Website
 
@@ -73,6 +109,23 @@ Bachelor of Computer Science. Courses: Deep Learning, Neural Networks, Artificia
 };
 
 window.SAMPLE_JDS = {
+  swe_role: `Software Engineer — Backend Services
+
+Build distributed backend services in Python and Java for a high-throughput data platform. Own services from design to deployment; work closely with infrastructure and ML teams.
+
+Responsibilities:
+- Design and build REST APIs handling thousands of requests per second
+- Containerize services with Docker; deploy via CI/CD pipelines to Kubernetes
+- Partner with cross-functional teams on system design and integration
+- Improve reliability through observability, testing, and incident response
+
+Requirements:
+- 1-3 years of professional software engineering experience (internships count)
+- Proficiency in Python, Java, or C++
+- Experience with Docker, Kubernetes, and CI/CD (GitLab, Jenkins, or similar)
+- Cloud platform experience (AWS, Azure, or GCP)
+- Bonus: distributed systems, data pipelines, ETL`,
+
   ml_role: `Senior Machine Learning Engineer — Edge AI Platform
 
 We're building inference infrastructure for ML models running on resource-constrained edge devices. You'll own the model optimization pipeline: quantization, distillation, pruning, and the deployment story across heterogeneous hardware (NPUs, mobile GPUs, embedded CPUs).
