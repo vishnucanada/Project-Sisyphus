@@ -67,70 +67,69 @@ function renderQual(q) {
     </div>`;
 }
 
-function renderBulletRow(b, sectionProtected, jdKeywords) {
+function renderBulletRow(b, jdKeywords) {
   const row = document.createElement("div");
-  row.className = "diffrow" + (sectionProtected ? " protected" : "");
+  row.className = "diffrow";
 
   const cb = document.createElement("input");
   cb.type = "checkbox"; cb.checked = b.accepted;
-  cb.disabled = sectionProtected;
   cb.addEventListener("change", () => { b.accepted = cb.checked; row.classList.toggle("rejected", !cb.checked); });
 
-  const stack = document.createElement("div");
-  const orig = document.createElement("div");
-  orig.className = "orig"; orig.textContent = "original: " + b.original;
-  stack.appendChild(orig);
+  const left = document.createElement("div");
+  left.className = "diff-side left";
 
-  const tail = document.createElement("div");
-  tail.className = "tail";
-  tail.title = sectionProtected ? "Protected section — not modified" : "Click to edit";
+  const right = document.createElement("div");
+  right.className = "diff-side right";
+  right.title = "Click to edit";
 
-  const renderTail = () => {
-    if (sectionProtected || !b.tailored || b.tailored === b.original) {
-      tail.innerHTML = `<span class="diff-same">${b.original.replace(/[<>&]/g, c => ({ "<":"&lt;",">":"&gt;","&":"&amp;" }[c]))}</span>`;
-    } else {
-      tail.innerHTML = DIFF.renderDiffHTML(b.original, b.tailored);
+  const renderSides = () => {
+    const sides = DIFF.renderDiffSideBySide(b.original, b.tailored ?? b.original);
+    left.innerHTML = sides.leftHTML;
+    right.innerHTML = sides.rightHTML;
+    if (b.tailored && b.tailored !== b.original) {
       const v = VALIDATOR.validateBullet({ original: b.original, rewrite: b.tailored, allowedExtras: jdKeywords });
       if (!v.ok) {
         const flag = document.createElement("span");
         flag.className = "badge-flag"; flag.textContent = " ⚠ " + v.reasonText;
-        tail.appendChild(flag);
+        right.appendChild(flag);
       }
     }
   };
 
-  // Inline edit on click (unless protected)
-  tail.addEventListener("click", () => {
-    if (sectionProtected) return;
+  right.addEventListener("click", () => {
     const ta = document.createElement("textarea");
     ta.value = b.tailored ?? b.original;
-    ta.rows = Math.max(2, Math.ceil(ta.value.length / 80));
-    tail.innerHTML = ""; tail.appendChild(ta); ta.focus();
-    const save = () => {
-      b.tailored = ta.value.trim();
-      renderTail();
-    };
-    ta.addEventListener("blur", save);
+    ta.rows = Math.max(2, Math.ceil(ta.value.length / 60));
+    right.innerHTML = ""; right.appendChild(ta); ta.focus();
+    ta.addEventListener("blur", () => { b.tailored = ta.value.trim(); renderSides(); });
     ta.addEventListener("keydown", (e) => {
       if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); ta.blur(); }
       if (e.key === "Escape") { ta.value = b.tailored ?? b.original; ta.blur(); }
     });
   });
 
-  renderTail();
-  stack.appendChild(tail);
-  row.append(cb, stack);
+  renderSides();
+  row.append(cb, left, right);
   return row;
 }
 
 function renderDiff(blocks, jdKeywords) {
   const container = $("diff"); container.innerHTML = "";
+  let headerShown = false;
   for (const sec of RESUME_PARSER.groupBulletsBySection(blocks)) {
+    if (sec.protected) continue; // skip Projects/Publications/Education entirely from UI
     const h = document.createElement("div");
     h.className = "section-title";
-    h.textContent = sec.section + (sec.subheading ? " — " + sec.subheading.replace(/\*\*/g, "") : "") + (sec.protected ? "  (protected)" : "");
+    h.textContent = sec.section + (sec.subheading ? " — " + sec.subheading.replace(/\*\*/g, "") : "");
     container.appendChild(h);
-    for (const b of sec.bullets) container.appendChild(renderBulletRow(b, sec.protected, jdKeywords));
+    if (!headerShown) {
+      const hdr = document.createElement("div");
+      hdr.className = "diffhdr";
+      hdr.innerHTML = `<div></div><div>Original</div><div>Tailored (click to edit)</div>`;
+      container.appendChild(hdr);
+      headerShown = true;
+    }
+    for (const b of sec.bullets) container.appendChild(renderBulletRow(b, jdKeywords));
   }
 }
 
