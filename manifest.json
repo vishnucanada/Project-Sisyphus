@@ -1,0 +1,11 @@
+{
+  "manifest_version": 3,
+  "name": "Resume Tailor",
+  "version": "0.1.0",
+  "description": "Scans the active job description and tailors a matching resume variant.",
+  "permissions": ["activeTab", "storage", "sidePanel", "scripting"],
+  "action": { "default_title": "Open Resume Tailor" },
+  "side_panel": { "default_path": "sidepanel.html" },
+  "background": { "service_worker": "background.js" },
+  "minimum_chrome_version": "128"
+}
