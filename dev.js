@@ -10,23 +10,38 @@ const DEFAULT_VARIANTS = {
 $("variants").value = JSON.stringify(DEFAULT_VARIANTS, null, 2);
 $("jd").value = "We're hiring a backend engineer to scale our Go services on Postgres and Kafka. You'll own observability and SLOs.";
 
+// MODEL is set by either model-gemini.js (sync) or model-webllm.js (ESM, async).
+async function waitForModel(timeoutMs = 5000) {
+  const start = performance.now();
+  while (!window.MODEL) {
+    if (performance.now() - start > timeoutMs) throw new Error("MODEL never loaded");
+    await new Promise(r => setTimeout(r, 50));
+  }
+}
+
 (async () => {
+  try { await waitForModel(); }
+  catch (e) { $("diag").textContent = "no model backend"; log(e.message); return; }
+
+  log(`backend = ${MODEL.name}${MODEL.modelId ? " (" + MODEL.modelId + ")" : ""}`);
   const a = await MODEL.available();
-  $("diag").textContent = `Prompt API: ${a}`;
+  $("diag").textContent = `state: ${a}`;
   log(`availability = ${a}`);
-  if (a === "downloadable" || a === "downloading") {
-    log("triggering model download (~2GB on first run)…");
+
+  if (a === "no-webgpu") { log("WebGPU not available — chrome://flags/#enable-unsafe-webgpu or use Chrome 113+"); return; }
+  if (a === "no-api")    { log("Prompt API not exposed — wrong backend or flag missing"); return; }
+
+  if (a !== "available") {
+    log("warming model (first run downloads weights from HuggingFace, ~1.8GB for Llama 3.2 3B)…");
     try {
-      await MODEL.warm((loaded) => {
+      await MODEL.warm((loaded, text) => {
         const pct = Math.round(loaded * 100);
-        $("diag").textContent = `Downloading: ${pct}%`;
-        log(`  download ${pct}%`);
+        $("diag").textContent = `loading: ${pct}%`;
+        if (text) log(`  ${text}`);
       });
-      $("diag").textContent = "Prompt API: available";
-      log("download complete — ready.");
-    } catch (e) {
-      log("download failed: " + e.message);
-    }
+      $("diag").textContent = "state: available";
+      log("ready.");
+    } catch (e) { log("warm failed: " + e.message); }
   }
 })();
 
@@ -50,10 +65,7 @@ async function run({ rewriteToo }) {
   $("variantLabel").textContent = cls.label;
   $("keywords").textContent = (cls.keywords || []).join(", ");
 
-  if (!rewriteToo) {
-    $("timings").textContent = `classify ${classifyMs}ms`;
-    return;
-  }
+  if (!rewriteToo) { $("timings").textContent = `classify ${classifyMs}ms`; return; }
   if (!variants[cls.label]) { log(`unknown label: ${cls.label}`); return; }
 
   t0 = performance.now();

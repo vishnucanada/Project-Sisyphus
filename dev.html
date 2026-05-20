@@ -19,7 +19,11 @@
 
   <div class="row">
     <div>
-      <h2>Job description</h2>
+      <h2>Job description
+        <select id="sampleJd">
+          <option value="">— sample JDs —</option>
+        </select>
+      </h2>
       <textarea id="jd" rows="14" placeholder="Paste a JD here…"></textarea>
     </div>
     <div>
@@ -42,6 +46,7 @@
   <textarea id="tailored" rows="20"></textarea>
 
   <script src="prompts.js"></script>
+  <script src="resumes.js"></script>
   <script type="module" src="model-webllm.js"></script>
   <script src="dev.js"></script>
 </body>
