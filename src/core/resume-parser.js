@@ -81,4 +81,18 @@ function serializeBlocks(blocks) {
   return lines.join("\n");
 }
 
-window.RESUME_PARSER = { parseResume, groupBulletsBySection, serializeBlocks, isProtected, PROTECTED_SECTIONS };
+// Permute a section's bullets within the flat blocks array.
+// `permutation[k]` is the original index (within sectionBullets) of the bullet that should
+// land in position k. Updates both `blocks` and `sectionBullets` in place.
+function reorderSectionBullets(blocks, sectionBullets, permutation) {
+  const positions = [];
+  for (let i = 0; i < blocks.length; i++) {
+    if (sectionBullets.includes(blocks[i])) positions.push(i);
+  }
+  if (positions.length !== sectionBullets.length) return;
+  const newOrder = permutation.map(p => sectionBullets[p]);
+  positions.forEach((pos, k) => { blocks[pos] = newOrder[k]; });
+  sectionBullets.splice(0, sectionBullets.length, ...newOrder);
+}
+
+window.RESUME_PARSER = { parseResume, groupBulletsBySection, serializeBlocks, isProtected, PROTECTED_SECTIONS, reorderSectionBullets };

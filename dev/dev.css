@@ -113,5 +113,6 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .diff-add { background: var(--diff-add-bg); color: var(--diff-add-fg); padding: 0 3px; border-radius: 3px; }
 .diff-del { background: var(--diff-del-bg); color: var(--diff-del-fg); text-decoration: line-through; padding: 0 3px; border-radius: 3px; }
 .badge-flag { background: var(--red-soft); color: var(--red); padding: 2px 6px; border-radius: 4px; font-size: 10px; margin-left: 4px; }
+.badge-warn { background: var(--amber-soft); color: var(--amber); padding: 2px 6px; border-radius: 4px; font-size: 10px; margin-left: 4px; }
 
 .empty { color: var(--muted); font-style: italic; padding: 20px; text-align: center; }

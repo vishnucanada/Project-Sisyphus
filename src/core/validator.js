@@ -100,4 +100,21 @@ function validateAll(bullets, jdKeywords) {
   }));
 }
 
-window.VALIDATOR = { validateBullet, validateAll, extractNumbers, extractTechTokens };
+// Quantification check: warn when a rewrite dropped quantitative claims from the original.
+// Returns { kind, message } or null if fine.
+function checkQuantification(original, rewrite) {
+  if (!rewrite || rewrite === original) return null;
+  const o = extractNumbers(original);
+  const r = extractNumbers(rewrite);
+  if (o.length === 0) return null;
+  if (r.length < o.length) {
+    const missing = o.filter(n => !r.includes(n));
+    return {
+      kind: "lost-metric",
+      message: `dropped metric${missing.length > 1 ? "s" : ""}: ${missing.join(", ")}`
+    };
+  }
+  return null;
+}
+
+window.VALIDATOR = { validateBullet, validateAll, extractNumbers, extractTechTokens, checkQuantification };

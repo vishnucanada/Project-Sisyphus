@@ -86,6 +86,12 @@ function renderBulletRow(b, jdKeywords) {
         flag.className = "badge-flag"; flag.textContent = " ⚠ " + v.reasonText;
         right.appendChild(flag);
       }
+      const q = VALIDATOR.checkQuantification(b.original, b.tailored);
+      if (q) {
+        const w = document.createElement("span");
+        w.className = "badge-warn"; w.textContent = q.message;
+        right.appendChild(w);
+      }
     }
   };
 
@@ -152,7 +158,23 @@ $("clearHistBtn").addEventListener("click", async () => {
   if (confirm("Clear all saved applications?")) { await HISTORY.clearHistory(); renderHistory(); }
 });
 
+async function rankBulletsInPlace(blocks, jd) {
+  if (!window.EMBEDDINGS) return; // extension may not have embeddings bundled yet
+  const sections = RESUME_PARSER.groupBulletsBySection(blocks);
+  for (const sec of sections) {
+    if (sec.protected || sec.bullets.length < 2) continue;
+    try {
+      const ranked = await EMBEDDINGS.rankBulletsByJD(sec.bullets.map(b => b.original), jd);
+      RESUME_PARSER.reorderSectionBullets(blocks, sec.bullets, ranked.map(r => r.i));
+    } catch (e) { /* skip silently — ranking is optional */ }
+  }
+}
+
 async function runRewrite(blocks, ctx) {
+  status("Ranking bullets by relevance…");
+  await rankBulletsInPlace(blocks, ctx.jd);
+  renderDiff(blocks, ctx.keywords);
+
   const sections = RESUME_PARSER.groupBulletsBySection(blocks);
   for (const sec of sections) {
     if (sec.protected) { sec.bullets.forEach(b => { b.tailored = b.original; }); continue; }

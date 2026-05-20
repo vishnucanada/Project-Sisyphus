@@ -57,25 +57,52 @@ function renderDiffHTML(original, rewritten) {
   }).join("");
 }
 
-// Side-by-side: returns {leftHTML, rightHTML}.
-// Left = original, with words that got removed marked with .diff-del.
-// Right = rewritten, with words that got added marked with .diff-add.
-// Whitespace tokens render plain on both sides (no double-highlighting of spaces).
-function renderDiffSideBySide(original, rewritten) {
+// Classify a single added token's provenance: did it come from the original,
+// from a JD keyword (allowed synonym), or did the model invent it?
+function classifyProvenance(token, originalLower, jdKeywords) {
+  const t = token.toLowerCase().replace(/[.,!?;:]+$/g, "");
+  if (t.length < 3) return "common";
+  if (originalLower.includes(t)) return "original";
+  if (originalLower.includes(t.replace(/s$/, ""))) return "original";
+  if (originalLower.includes(t.replace(/ed$/, ""))) return "original";
+  if (originalLower.includes(t.replace(/ing$/, ""))) return "original";
+  for (const kw of jdKeywords || []) {
+    const k = kw.toLowerCase();
+    if (k.includes(t) || t.includes(k)) return "jd";
+  }
+  if (/^[a-z]+$/.test(token) && !/[A-Z0-9./-]/.test(token)) return "common";
+  return "model";
+}
+
+const PROV_LABEL = {
+  original: "from original resume",
+  jd: "from JD keyword (allowed synonym)",
+  common: "common word",
+  model: "model-introduced — verify"
+};
+
+function renderDiffSideBySide(original, rewritten, jdKeywords) {
   if (!rewritten || rewritten === original) {
     const safe = escapeHTML(original || "");
     return { leftHTML: safe, rightHTML: safe };
   }
   const parts = wordDiff(original, rewritten);
+  const originalLower = original.toLowerCase();
   let left = "", right = "";
   for (const p of parts) {
     const v = escapeHTML(p.value);
     const isWS = /^\s+$/.test(p.value);
     if (p.type === "same") { left += v; right += v; }
     else if (p.type === "del") { left += isWS ? v : `<span class="diff-del">${v}</span>`; }
-    else if (p.type === "add") { right += isWS ? v : `<span class="diff-add">${v}</span>`; }
+    else if (p.type === "add") {
+      if (isWS) right += v;
+      else {
+        const prov = classifyProvenance(p.value, originalLower, jdKeywords);
+        right += `<span class="diff-add prov-${prov}" title="${PROV_LABEL[prov]}">${v}</span>`;
+      }
+    }
   }
   return { leftHTML: left, rightHTML: right };
 }
 
-window.DIFF = { wordDiff, renderDiffHTML, renderDiffSideBySide };
+window.DIFF = { wordDiff, renderDiffHTML, renderDiffSideBySide, classifyProvenance };

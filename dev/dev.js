@@ -88,6 +88,12 @@ function renderBulletRow(b, jdKeywords) {
         flag.className = "badge-flag"; flag.textContent = "flagged: " + v.reasonText;
         right.appendChild(flag);
       }
+      const q = VALIDATOR.checkQuantification(b.original, b.tailored);
+      if (q) {
+        const w = document.createElement("span");
+        w.className = "badge-warn"; w.textContent = q.message;
+        right.appendChild(w);
+      }
     }
   };
 
@@ -126,7 +132,22 @@ function renderDiff(blocks, jdKeywords) {
   }
 }
 
+async function rankBulletsInPlace(blocks, jd) {
+  const sections = RESUME_PARSER.groupBulletsBySection(blocks);
+  for (const sec of sections) {
+    if (sec.protected || sec.bullets.length < 2) continue;
+    const ranked = await EMBEDDINGS.rankBulletsByJD(sec.bullets.map(b => b.original), jd);
+    const permutation = ranked.map(r => r.i);
+    RESUME_PARSER.reorderSectionBullets(blocks, sec.bullets, permutation);
+    log(`  reordered ${sec.section}${sec.subheading ? " / " + sec.subheading.replace(/\*\*/g, "") : ""} by JD relevance`);
+  }
+}
+
 async function doRewrite(blocks, ctx) {
+  log("ranking bullets by JD relevance…");
+  await rankBulletsInPlace(blocks, ctx.jd);
+  renderDiff(blocks, ctx.keywords); // show new order before rewrite
+
   const sections = RESUME_PARSER.groupBulletsBySection(blocks);
   log(`parsed ${blocks.filter(b => b.type === "bullet").length} bullets, ${sections.length} sections`);
   const t0 = performance.now();
