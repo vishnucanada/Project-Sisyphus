@@ -59,7 +59,13 @@
   </section>
 
   <section class="card" id="diffCard" hidden>
-    <h2>4 · Bullet diff <span style="color: var(--muted); text-transform: none; letter-spacing: 0; font-weight: 400">— click right column to edit</span></h2>
+    <h2>4 · Bullet diff <span style="color: var(--muted); text-transform: none; letter-spacing: 0; font-weight: 400">— click right column to edit · hover green words for provenance</span></h2>
+    <div style="font-size: 11px; color: var(--muted); margin-bottom: 8px">
+      Added words:
+      <span class="diff-add prov-original" style="margin: 0 2px">from original</span>
+      <span class="diff-add prov-jd" style="margin: 0 2px">from JD keyword</span>
+      <span class="diff-add prov-model" style="margin: 0 2px">model-introduced — verify</span>
+    </div>
     <div id="diff"></div>
     <div class="actions" style="margin-top: 14px">
       <button class="primary" id="previewBtn" title="Open the tailored resume rendered as a real document in a new tab">Preview resume</button>

@@ -18,7 +18,10 @@
     .diffhdr { display: grid; grid-template-columns: 16px 1fr 1fr; gap: 6px; font-size: 10px; color: #999; padding: 2px 0; text-transform: uppercase; }
     .diffrow.rejected .right { text-decoration: line-through; opacity: 0.5; }
     .diff-same { color: #444; }
-    .diff-add { background: #c8f7c8; color: #064; padding: 0 2px; border-radius: 2px; }
+    .diff-add { background: #c8f7c8; color: #064; padding: 0 2px; border-radius: 2px; cursor: help; }
+    .diff-add.prov-jd { border-bottom: 2px solid #2563eb; }
+    .diff-add.prov-model { border-bottom: 2px solid #d97706; }
+    .diff-add.prov-common { opacity: 0.85; }
     .diff-del { background: #ffd0d0; color: #800; text-decoration: line-through; padding: 0 2px; border-radius: 2px; }
     .badge-flag { background: #fee; color: #900; padding: 1px 4px; border-radius: 3px; font-size: 10px; }
     .badge-warn { background: #fffbeb; color: #d97706; padding: 1px 4px; border-radius: 3px; font-size: 10px; margin-left: 3px; }

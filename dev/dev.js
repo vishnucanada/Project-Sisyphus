@@ -79,7 +79,7 @@ function renderBulletRow(b, jdKeywords) {
   right.title = "Click to edit";
 
   const renderSides = () => {
-    const s = DIFF.renderDiffSideBySide(b.original, b.tailored ?? b.original);
+    const s = DIFF.renderDiffSideBySide(b.original, b.tailored ?? b.original, jdKeywords);
     left.innerHTML = s.leftHTML; right.innerHTML = s.rightHTML;
     if (b.tailored && b.tailored !== b.original) {
       const v = VALIDATOR.validateBullet({ original: b.original, rewrite: b.tailored, allowedExtras: jdKeywords });

@@ -76,7 +76,7 @@ function renderBulletRow(b, jdKeywords) {
   right.title = "Click to edit";
 
   const renderSides = () => {
-    const sides = DIFF.renderDiffSideBySide(b.original, b.tailored ?? b.original);
+    const sides = DIFF.renderDiffSideBySide(b.original, b.tailored ?? b.original, jdKeywords);
     left.innerHTML = sides.leftHTML;
     right.innerHTML = sides.rightHTML;
     if (b.tailored && b.tailored !== b.original) {
