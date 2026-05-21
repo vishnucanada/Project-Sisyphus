@@ -1,0 +1,8 @@
+.DS_Store
+node_modules/
+*.log
+
+# Local-only chrome.storage exports / personal dumps
+applications.json
+history.json
+.local/

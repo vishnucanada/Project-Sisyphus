@@ -188,9 +188,13 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .hist-row {
   padding: 6px 0; border-top: 1px solid var(--border); font-size: 11px;
+  overflow-wrap: anywhere; word-break: break-word;
 }
 .hist-row:first-child { border-top: none; }
-.hist-row .meta { color: var(--muted); font-size: 10px; }
+.hist-row .meta {
+  color: var(--muted); font-size: 10px;
+  overflow-wrap: anywhere; word-break: break-all;
+}
 .hist-row button.del {
   font-size: 10px; padding: 2px 6px; margin-left: 6px;
   color: var(--red); border-color: #fecaca;

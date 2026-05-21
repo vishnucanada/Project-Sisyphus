@@ -1,14 +1,28 @@
 // Gemini Nano backend (Chrome built-in Prompt API).
 
+// Sampling profiles. Deterministic for JSON classification/qual; mildly creative for rewrite.
+const SAMPLING = {
+  deterministic: { temperature: 0, topK: 1 },
+  rewrite: { temperature: 0.2, topK: 3 }
+};
+
 const _sessions = new Map();
-async function getSession(systemPrompt) {
-  if (_sessions.has(systemPrompt)) return _sessions.get(systemPrompt);
+
+function sessionKey(systemPrompt, sampling) {
+  return systemPrompt + "|t=" + sampling.temperature + "|k=" + sampling.topK;
+}
+
+async function getSession(systemPrompt, sampling = SAMPLING.deterministic) {
+  const key = sessionKey(systemPrompt, sampling);
+  if (_sessions.has(key)) return _sessions.get(key);
   const s = await LanguageModel.create({
     initialPrompts: [{ role: "system", content: systemPrompt }],
     expectedInputs: [{ type: "text", languages: ["en"] }],
-    expectedOutputs: [{ type: "text", languages: ["en"] }]
+    expectedOutputs: [{ type: "text", languages: ["en"] }],
+    temperature: sampling.temperature,
+    topK: sampling.topK
   });
-  _sessions.set(systemPrompt, s);
+  _sessions.set(key, s);
   return s;
 }
 
@@ -27,6 +41,16 @@ window.MODEL = {
       monitor: (m) => m.addEventListener("downloadprogress", (e) => onProgress?.(e.loaded))
     });
     s.destroy?.();
+  },
+
+  // Build the two deterministic sessions eagerly so the first user click skips session-init latency.
+  async preloadSessions() {
+    try {
+      await Promise.all([
+        getSession(PROMPTS.CLASSIFY_SYSTEM),
+        getSession(PROMPTS.QUAL_CHECK_SYSTEM)
+      ]);
+    } catch { /* model not ready yet — preload is best-effort */ }
   },
 
   async classify(jd, labels) {
@@ -58,7 +82,9 @@ window.MODEL = {
       const s = await LanguageModel.create({
         initialPrompts: [{ role: "system", content: sys }],
         expectedInputs: [{ type: "text", languages: ["en"] }],
-        expectedOutputs: [{ type: "text", languages: ["en"] }]
+        expectedOutputs: [{ type: "text", languages: ["en"] }],
+        temperature: SAMPLING.rewrite.temperature,
+        topK: SAMPLING.rewrite.topK
       });
       try {
         const stream = s.promptStreaming(
