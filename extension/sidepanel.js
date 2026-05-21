@@ -193,7 +193,7 @@ function renderDiff(blocks, jdKeywords) {
     if (!headerShown) {
       const hdr = document.createElement("div");
       hdr.className = "diffhdr";
-      hdr.innerHTML = `<div></div><div>Original → Tailored</div>`;
+      hdr.innerHTML = `<div></div><div>Original</div><div class="hdr-tailored">Tailored</div>`;
       root.appendChild(hdr);
       headerShown = true;
     }
