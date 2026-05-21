@@ -1,10 +1,11 @@
 const $ = (id) => document.getElementById(id);
 const status = (msg) => { $("status").textContent = msg; };
+const log = (msg) => { $("log").textContent += msg + "\n"; $("log").scrollTop = 1e9; };
 
 const GOOD_ENOUGH_THRESHOLD = 0.70;
 let CURRENT_BLOCKS = null;
 let CURRENT_META = null;
-let CURRENT_KEYWORDS = [];
+let CURRENT_CONTEXT = null;
 
 async function loadVariants() {
   const { variants } = await chrome.storage.local.get("variants");
@@ -17,15 +18,69 @@ document.querySelectorAll(".tab").forEach(t => t.addEventListener("click", () =>
   if (t.dataset.tab === "history") renderHistory();
 }));
 
+document.querySelectorAll('input[name="jdSource"]').forEach(r => r.addEventListener("change", () => {
+  $("manualBlock").hidden = r.value !== "manual" || !r.checked;
+}));
+
+async function waitFor(key, ms = 8000) {
+  const t = performance.now();
+  while (!window[key]) {
+    if (performance.now() - t > ms) throw new Error(`${key} never loaded`);
+    await new Promise(r => setTimeout(r, 50));
+  }
+}
+
 async function init() {
   $("variants").value = JSON.stringify(await loadVariants(), null, 2);
+
+  for (const key of Object.keys(window.SAMPLE_JDS || {})) {
+    const opt = document.createElement("option");
+    opt.value = key; opt.textContent = key;
+    $("sampleJd").appendChild(opt);
+  }
+  $("sampleJd").addEventListener("change", () => {
+    if ($("sampleJd").value) $("jd").value = window.SAMPLE_JDS[$("sampleJd").value];
+  });
+
+  try { await Promise.all([waitFor("MODEL"), waitFor("EMBEDDINGS")]); }
+  catch (e) { log("init: " + e.message); }
+
+  log(`backend = ${MODEL.name}`);
   const a = await MODEL.available();
-  if (a === "no-api") status("Prompt API missing — enable chrome://flags/#prompt-api-for-gemini-nano.");
-  else if (a !== "available") {
-    status(`Model: ${a}. Warming…`);
-    try { await MODEL.warm((loaded) => status(`Downloading: ${Math.round(loaded * 100)}%`)); status("Ready."); }
-    catch (e) { status("Warm failed: " + e.message); }
-  } else status("Ready.");
+  $("diag").textContent = `LLM: ${a}`;
+  if (a === "no-api") {
+    status("Prompt API missing — enable chrome://flags/#prompt-api-for-gemini-nano.");
+  } else if (a === "downloadable" || a === "downloading") {
+    status("Warming LLM…");
+    log("warming LLM…");
+    try {
+      await MODEL.warm((loaded) => {
+        $("diag").textContent = `LLM: ${Math.round(loaded * 100)}%`;
+      });
+      $("diag").textContent = "LLM: available";
+      status("LLM ready.");
+    } catch (e) {
+      log("LLM warm failed: " + e.message);
+      status("LLM warm failed: " + e.message);
+    }
+  } else {
+    status("LLM ready.");
+  }
+
+  if (window.EMBEDDINGS) {
+    log("warming embedding model…");
+    $("embDiag").textContent = "Emb: loading";
+    try {
+      await EMBEDDINGS.warm((p) => {
+        if (p?.progress != null) $("embDiag").textContent = `Emb: ${Math.round(p.progress)}%`;
+      });
+      $("embDiag").textContent = "Emb: ready";
+      log("embeddings ready.");
+    } catch (e) {
+      $("embDiag").textContent = "Emb: failed";
+      log("emb warm failed: " + e.message);
+    }
+  }
 }
 
 $("saveVarsBtn").addEventListener("click", async () => {
@@ -44,19 +99,33 @@ function tokenSim(a, b) {
   return inter / (Math.sqrt(ta.size * tb.size) || 1);
 }
 
-function matchVariantLocal(jd, variants) {
+function matchVariantFallback(jd, variants) {
   const scores = Object.entries(variants).map(([label, text]) => ({ label, score: tokenSim(jd, text) }))
     .sort((a, b) => b.score - a.score);
   const top = scores[0], next = scores[1] || { score: 0 };
   return { label: top.label, confidence: Math.min(1, Math.max(0, (top.score - next.score) * 5 + 0.5)), scores };
 }
 
+function renderScores(scores) {
+  $("scores").innerHTML = scores.map((s, i) =>
+    `<span class="score-pill ${i === 0 ? "top" : ""}">${s.label}: ${s.score.toFixed(3)}</span>`).join("");
+}
+
 function renderQual(q) {
-  const cls = "qual-" + q.verdict;
+  const cls = q.verdict === "qualified" ? "ok" : q.verdict === "stretch" ? "warn" : "err";
   $("qualBanner").innerHTML = `
-    <div class="qual-banner ${cls}">
+    <div class="banner ${cls}">
       <strong>${q.verdict.toUpperCase()}</strong> — ${q.reasoning}
-      ${q.missing?.length ? `<br><em>Missing:</em> ${q.missing.join("; ")}` : ""}
+      ${q.missing?.length ? `<br><small>Missing: ${q.missing.join("; ")}</small>` : ""}
+    </div>`;
+}
+
+function renderFitGap(gap) {
+  $("fitgap").innerHTML = `
+    <div class="coverage">Coverage: ${Math.round(gap.coverage * 100)}%</div>
+    <div class="kwgroup">
+      ${gap.present.map(k => `<span class="kw present">${k}</span>`).join("")}
+      ${gap.missing.map(k => `<span class="kw missing">${k}</span>`).join("")}
     </div>`;
 }
 
@@ -68,11 +137,10 @@ function renderBulletRow(b, jdKeywords) {
   cb.type = "checkbox"; cb.checked = b.accepted;
   cb.addEventListener("change", () => { b.accepted = cb.checked; row.classList.toggle("rejected", !cb.checked); });
 
-  const left = document.createElement("div");
-  left.className = "diff-side left";
-
-  const right = document.createElement("div");
-  right.className = "diff-side right";
+  const stack = document.createElement("div");
+  stack.className = "diff-stack";
+  const left = document.createElement("div"); left.className = "diff-side left";
+  const right = document.createElement("div"); right.className = "diff-side right";
   right.title = "Click to edit";
 
   const renderSides = () => {
@@ -83,7 +151,7 @@ function renderBulletRow(b, jdKeywords) {
       const v = VALIDATOR.validateBullet({ original: b.original, rewrite: b.tailored, allowedExtras: jdKeywords });
       if (!v.ok) {
         const flag = document.createElement("span");
-        flag.className = "badge-flag"; flag.textContent = " ⚠ " + v.reasonText;
+        flag.className = "badge-flag"; flag.textContent = "flagged: " + v.reasonText;
         right.appendChild(flag);
       }
       const q = VALIDATOR.checkQuantification(b.original, b.tailored);
@@ -108,7 +176,8 @@ function renderBulletRow(b, jdKeywords) {
   });
 
   renderSides();
-  row.append(cb, left, right);
+  stack.append(left, right);
+  row.append(cb, stack);
   return row;
 }
 
@@ -124,7 +193,7 @@ function renderDiff(blocks, jdKeywords) {
     if (!headerShown) {
       const hdr = document.createElement("div");
       hdr.className = "diffhdr";
-      hdr.innerHTML = `<div></div><div>Original</div><div>Tailored</div>`;
+      hdr.innerHTML = `<div></div><div>Original → Tailored</div>`;
       root.appendChild(hdr);
       headerShown = true;
     }
@@ -132,22 +201,16 @@ function renderDiff(blocks, jdKeywords) {
   }
 }
 
-function renderFitGap(gap) {
-  $("fitgap").innerHTML = `
-    Coverage <strong>${Math.round(gap.coverage * 100)}%</strong>.<br>
-    ${gap.present.map(k => `<span class="pill present">${k}</span>`).join("")}
-    ${gap.missing.map(k => `<span class="pill missing">${k}</span>`).join("")}`;
-}
-
 async function renderHistory() {
   const items = await HISTORY.loadHistory();
   const root = $("history");
-  if (!items.length) { root.innerHTML = "<p><em>No saved applications yet.</em></p>"; return; }
+  if (!items.length) { root.innerHTML = `<div class="empty">No saved applications yet.</div>`; return; }
   root.innerHTML = items.map(it => `
     <div class="hist-row">
-      <strong>${it.company || "?"}</strong> — ${it.role || "?"} · <span class="meta">${it.variant} · ${new Date(it.savedAt).toLocaleString()}</span><br>
+      <strong>${it.company || "?"}</strong> — ${it.role || "?"}<br>
+      <span class="meta">${it.variant} · ${new Date(it.savedAt).toLocaleString()}</span>
+      <button data-id="${it.id}" class="del">delete</button><br>
       <span class="meta">${it.url || ""}</span>
-      <button data-id="${it.id}" class="del">delete</button>
     </div>`).join("");
   root.querySelectorAll(".del").forEach(b => b.addEventListener("click", async () => {
     await HISTORY.deleteApplication(b.dataset.id); renderHistory();
@@ -159,26 +222,31 @@ $("clearHistBtn").addEventListener("click", async () => {
 });
 
 async function rankBulletsInPlace(blocks, jd) {
-  if (!window.EMBEDDINGS) return; // extension may not have embeddings bundled yet
+  if (!window.EMBEDDINGS) return;
   const sections = RESUME_PARSER.groupBulletsBySection(blocks);
   for (const sec of sections) {
     if (sec.protected || sec.bullets.length < 2) continue;
     try {
       const ranked = await EMBEDDINGS.rankBulletsByJD(sec.bullets.map(b => b.original), jd);
       RESUME_PARSER.reorderSectionBullets(blocks, sec.bullets, ranked.map(r => r.i));
-    } catch (e) { /* skip silently — ranking is optional */ }
+      log(`  reordered ${sec.section}${sec.subheading ? " / " + sec.subheading.replace(/\*\*/g, "") : ""} by JD relevance`);
+    } catch (e) { log("  rank failed for " + sec.section + ": " + e.message); }
   }
 }
 
-async function runRewrite(blocks, ctx) {
-  status("Ranking bullets by relevance…");
+async function doRewrite(blocks, ctx) {
+  log("ranking bullets by JD relevance…");
+  status("Ranking bullets…");
   await rankBulletsInPlace(blocks, ctx.jd);
   renderDiff(blocks, ctx.keywords);
 
   const sections = RESUME_PARSER.groupBulletsBySection(blocks);
+  log(`parsed ${blocks.filter(b => b.type === "bullet").length} bullets, ${sections.length} sections`);
+  const t0 = performance.now();
   for (const sec of sections) {
     if (sec.protected) { sec.bullets.forEach(b => { b.tailored = b.original; }); continue; }
     status(`Rewriting: ${sec.section} (${sec.bullets.length})…`);
+    log(`rewriting: ${sec.section}${sec.subheading ? " / " + sec.subheading.replace(/\*\*/g, "") : ""} (${sec.bullets.length})`);
     try {
       const tailored = await MODEL.rewriteBullets({
         jd: ctx.jd, keywords: ctx.keywords,
@@ -188,44 +256,87 @@ async function runRewrite(blocks, ctx) {
       sec.bullets.forEach((b, i) => { b.tailored = tailored[i] ?? b.original; });
       renderDiff(blocks, ctx.keywords);
     } catch (e) {
-      status(`Section "${sec.section}" failed: ${e.message}`);
+      log("  section failed: " + e.message);
       sec.bullets.forEach(b => { b.tailored = b.original; });
     }
   }
+  log(`rewrite total: ${(performance.now() - t0).toFixed(0)}ms`);
   CURRENT_BLOCKS = blocks;
+  $("diffCard").hidden = false;
   status("Done.");
 }
 
-$("tailorBtn").addEventListener("click", async () => {
-  $("diff").innerHTML = ""; $("fitgap").innerHTML = "";
-  $("qualBanner").innerHTML = ""; $("goodEnough").innerHTML = "";
-  CURRENT_BLOCKS = null;
-
+async function getJD() {
+  const source = document.querySelector('input[name="jdSource"]:checked').value;
+  if (source === "manual") {
+    const text = $("jd").value.trim();
+    if (!text) { status("Paste a JD first."); return null; }
+    return { text, site: "manual", url: "", title: "", company: "" };
+  }
   status("Scraping JD…");
-  const variants = await loadVariants();
   const scrape = await chrome.runtime.sendMessage({ type: "SCRAPE_JD" });
-  if (!scrape?.ok || !scrape.text) return status("Failed to scrape page.");
+  if (!scrape?.ok || !scrape.text) { status("Failed to scrape page."); return null; }
   status(`Scraped ${scrape.site} · ${scrape.text.length} chars.`);
+  log(`scraped ${scrape.site} · ${scrape.text.length} chars`);
+  return scrape;
+}
 
-  const match = matchVariantLocal(scrape.text, variants);
-  $("matchSummary").innerHTML = `Matched <strong>${match.label}</strong> · confidence ${(match.confidence * 100).toFixed(0)}%`;
+async function runFlow({ matchOnly }) {
+  $("timings").textContent = ""; $("log").textContent = "";
+  ["matchCard", "fitCard", "diffCard"].forEach(id => { $(id).hidden = true; });
+  $("diff").innerHTML = ""; $("goodEnough").innerHTML = ""; $("qualBanner").innerHTML = "";
+  CURRENT_BLOCKS = null; CURRENT_META = null; CURRENT_CONTEXT = null;
+
+  const variants = await loadVariants();
+  const scrape = await getJD();
+  if (!scrape) return;
+  const jd = scrape.text;
+
+  let t0 = performance.now();
+  log(window.EMBEDDINGS ? "matching variant (embeddings)…" : "matching variant (token overlap)…");
+  status("Matching variant…");
+  const match = window.EMBEDDINGS
+    ? await EMBEDDINGS.matchVariant(jd, variants)
+    : matchVariantFallback(jd, variants);
+  const matchMs = (performance.now() - t0).toFixed(0);
+  log(`match → ${match.label} (conf ${match.confidence.toFixed(2)}) in ${matchMs}ms`);
+
+  $("variantLabel").textContent = match.label;
+  $("confidence").textContent = `${Math.round(match.confidence * 100)}% confident`;
+  renderScores(match.scores);
+  $("matchCard").hidden = false;
+
   const resumeText = variants[match.label];
 
+  log("checking qualifications…");
   status("Checking qualifications…");
+  t0 = performance.now();
   let qual;
-  try { qual = await MODEL.checkQualification(scrape.text, resumeText); renderQual(qual); }
-  catch (e) { status("Qual check failed (continuing): " + e.message); }
-  if (qual?.verdict === "underqualified" && !$("overrideQualBtn").checked) {
-    return status("BLOCKED — underqualified. Tick override to proceed.");
+  try { qual = await MODEL.checkQualification(jd, resumeText); }
+  catch (e) { log("qual check failed (continuing): " + e.message); }
+  const qualMs = (performance.now() - t0).toFixed(0);
+  if (qual) {
+    log(`qual: ${qual.verdict} (${qualMs}ms) — ${qual.reasoning}`);
+    renderQual(qual);
+    if (qual.verdict === "underqualified" && !$("overrideQualBtn").checked) {
+      log("STOP: underqualified. Tick 'Override qual block' to proceed.");
+      status("BLOCKED — underqualified. Tick override to proceed.");
+      $("timings").textContent = `match ${matchMs}ms · qual ${qualMs}ms (BLOCKED)`;
+      return;
+    }
   }
 
+  log("extracting JD keywords…");
   status("Extracting JD keywords…");
-  const cls = await MODEL.classify(scrape.text, Object.keys(variants));
-  CURRENT_KEYWORDS = cls.keywords;
+  t0 = performance.now();
+  const cls = await MODEL.classify(jd, Object.keys(variants));
+  const kwMs = (performance.now() - t0).toFixed(0);
+  log(`keywords (${kwMs}ms): ${cls.keywords.join(", ")}`);
   const gap = PROMPTS.fitGap(cls.keywords, resumeText);
   renderFitGap(gap);
+  $("fitCard").hidden = false;
 
-  const ctx = { jd: scrape.text, keywords: cls.keywords };
+  CURRENT_CONTEXT = { jd, keywords: cls.keywords, match, resumeText };
   CURRENT_META = {
     url: scrape.url, site: scrape.site,
     company: scrape.company || "", role: scrape.title || "",
@@ -233,28 +344,42 @@ $("tailorBtn").addEventListener("click", async () => {
     qualVerdict: qual?.verdict || "unknown"
   };
 
-  // "Good enough" gate
+  if (matchOnly) {
+    $("timings").textContent = `match ${matchMs}ms · qual ${qualMs}ms · kw ${kwMs}ms`;
+    log("Check-fit done. Click 'Analyze & tailor' to rewrite.");
+    status("Check-fit done.");
+    return;
+  }
+
   if (gap.coverage >= GOOD_ENOUGH_THRESHOLD && !$("forceRewriteBtn").checked) {
-    const blocks = RESUME_PARSER.parseResume(resumeText);
-    CURRENT_BLOCKS = blocks;
-    renderDiff(blocks, cls.keywords);
+    CURRENT_BLOCKS = RESUME_PARSER.parseResume(resumeText);
+    renderDiff(CURRENT_BLOCKS, cls.keywords);
+    $("diffCard").hidden = false;
     $("goodEnough").innerHTML = `
-      <div class="qual-banner qual-qualified">
-        Resume already well-aligned (${Math.round(gap.coverage * 100)}% coverage). Rewrite optional.
-        <button id="rewriteAnywayBtn" style="margin-left:6px">Rewrite anyway</button>
+      <div class="banner ok">
+        <strong>Resume already well-aligned (${Math.round(gap.coverage * 100)}% keyword coverage).</strong>
+        Rewrite is optional — your original is a strong fit.
+        <div style="margin-top: 6px"><button id="rewriteAnywayBtn">Rewrite anyway</button></div>
       </div>`;
     $("rewriteAnywayBtn").addEventListener("click", async () => {
       $("goodEnough").innerHTML = "<em>Rewriting…</em>";
-      await runRewrite(RESUME_PARSER.parseResume(resumeText), ctx);
+      await doRewrite(RESUME_PARSER.parseResume(resumeText), CURRENT_CONTEXT);
       $("goodEnough").innerHTML = "";
     });
+    $("timings").textContent = `match ${matchMs}ms · qual ${qualMs}ms · kw ${kwMs}ms (no rewrite needed)`;
     status("No rewrite needed — preview/export the original.");
     return;
   }
 
+  const tRewrite = performance.now();
   const blocks = RESUME_PARSER.parseResume(resumeText);
-  await runRewrite(blocks, ctx);
-});
+  await doRewrite(blocks, CURRENT_CONTEXT);
+  const rewriteMs = (performance.now() - tRewrite).toFixed(0);
+  $("timings").textContent = `match ${matchMs}ms · qual ${qualMs}ms · kw ${kwMs}ms · rewrite ${rewriteMs}ms`;
+}
+
+$("tailorBtn").addEventListener("click", () => runFlow({ matchOnly: false }).catch(e => { log("ERR: " + e.message); status("Error: " + e.message); }));
+$("matchBtn").addEventListener("click", () => runFlow({ matchOnly: true }).catch(e => { log("ERR: " + e.message); status("Error: " + e.message); }));
 
 $("previewBtn").addEventListener("click", () => {
   if (!CURRENT_BLOCKS) return status("Nothing to preview yet.");
@@ -262,16 +387,17 @@ $("previewBtn").addEventListener("click", () => {
 });
 
 $("copyBtn").addEventListener("click", () => {
-  if (!CURRENT_BLOCKS) return;
+  if (!CURRENT_BLOCKS) return status("Nothing to copy yet.");
   navigator.clipboard.writeText(RESUME_PARSER.serializeBlocks(CURRENT_BLOCKS));
   status("Copied tailored resume to clipboard.");
 });
 
 $("docxBtn").addEventListener("click", async () => {
-  if (!CURRENT_BLOCKS) return;
+  if (!CURRENT_BLOCKS) return status("Nothing to export yet.");
   if (!window.DOCX_EXPORT) return status("docx not loaded yet");
-  const name = (CURRENT_META?.company || "tailored").toLowerCase().replace(/[^a-z0-9]+/g, "_");
+  const name = (CURRENT_META?.company || CURRENT_META?.variant || "tailored").toLowerCase().replace(/[^a-z0-9]+/g, "_");
   await DOCX_EXPORT.downloadDocx(CURRENT_BLOCKS, `${name}_resume.docx`);
+  status("Downloaded .docx");
 });
 
 $("saveBtn").addEventListener("click", async () => {

@@ -4,46 +4,14 @@
   <meta charset="utf-8" />
   <title>Resume Tailor</title>
   <link rel="stylesheet" href="sidepanel.css" />
-  <style>
-    .tabs { display: flex; gap: 4px; margin: 8px 0; }
-    .tab { padding: 4px 10px; cursor: pointer; border: 1px solid #ddd; border-radius: 4px; background: #f6f6f6; }
-    .tab.active { background: #fff; border-color: #888; font-weight: 600; }
-    .panel { display: none; } .panel.active { display: block; }
-    .diffrow { display: grid; grid-template-columns: 16px 1fr 1fr; gap: 6px; padding: 6px 0; border-top: 1px solid #eee; }
-    .diff-side { font-size: 12px; line-height: 1.5; padding: 2px 4px; border-radius: 3px; min-height: 1.2em; }
-    .diff-side.left { color: #888; background: #fafafa; }
-    .diff-side.right { color: #111; cursor: text; }
-    .diff-side.right:hover { background: #f8fff8; }
-    .diff-side textarea { width: 100%; font-family: inherit; font-size: inherit; }
-    .diffhdr { display: grid; grid-template-columns: 16px 1fr 1fr; gap: 6px; font-size: 10px; color: #999; padding: 2px 0; text-transform: uppercase; }
-    .diffrow.rejected .right { text-decoration: line-through; opacity: 0.5; }
-    .diff-same { color: #444; }
-    .diff-add { background: #c8f7c8; color: #064; padding: 0 2px; border-radius: 2px; cursor: help; }
-    .diff-add.prov-jd { border-bottom: 2px solid #2563eb; }
-    .diff-add.prov-model { border-bottom: 2px solid #d97706; }
-    .diff-add.prov-common { opacity: 0.85; }
-    .diff-del { background: #ffd0d0; color: #800; text-decoration: line-through; padding: 0 2px; border-radius: 2px; }
-    .badge-flag { background: #fee; color: #900; padding: 1px 4px; border-radius: 3px; font-size: 10px; }
-    .badge-warn { background: #fffbeb; color: #d97706; padding: 1px 4px; border-radius: 3px; font-size: 10px; margin-left: 3px; }
-    .qual-banner { padding: 6px 8px; border-radius: 4px; margin: 6px 0; font-size: 11px; }
-    .qual-qualified { background: #efe; color: #060; }
-    .qual-stretch { background: #ffd; color: #850; }
-    .qual-underqualified { background: #fee; color: #900; border: 1px solid #f88; }
-    .section-title { font-weight: 600; margin: 10px 0 2px; font-size: 11px; text-transform: uppercase; color: #555; }
-    .pill { display: inline-block; padding: 1px 5px; border-radius: 8px; background: #eef; margin: 1px; font-size: 10px; }
-    .pill.missing { background: #fee; color: #900; }
-    .pill.present { background: #efe; color: #060; }
-    .hist-row { padding: 6px 0; border-top: 1px solid #eee; font-size: 11px; }
-    .hist-row .meta { color: #888; }
-  </style>
 </head>
 <body>
-  <header>
+  <header class="top">
     <h1>Resume Tailor</h1>
-    <button id="tailorBtn">Tailor</button>
+    <span class="spacer"></span>
+    <span class="pill" id="diag">LLM: checking…</span>
+    <span class="pill" id="embDiag">Emb: idle</span>
   </header>
-
-  <section id="status"></section>
 
   <div class="tabs">
     <div class="tab active" data-tab="result">Result</div>
@@ -52,32 +20,85 @@
   </div>
 
   <section class="panel active" id="panel-result">
-    <div id="matchSummary"></div>
-    <div id="qualBanner"></div>
-    <label style="font-size:11px"><input type="checkbox" id="overrideQualBtn"> Override qualification block</label>
-    <label style="font-size:11px"><input type="checkbox" id="forceRewriteBtn"> Force rewrite</label>
-    <h3>Fit gap</h3>
-    <div id="fitgap"></div>
-    <div id="goodEnough"></div>
-    <h3>Bullet diff <small>(click right column to edit)</small></h3>
-    <div id="diff"></div>
-    <p>
-      <button id="previewBtn" title="Open the tailored resume rendered as a real document in a new tab">Preview</button>
-      <button id="copyBtn" title="Copy the tailored resume text to clipboard (paste into LinkedIn, Notion, docs)">Copy text</button>
-      <button id="docxBtn" title="Download as a Word .docx with formatting">Download .docx</button>
-      <button id="saveBtn" title="Save this application to history">Save to history</button>
-    </p>
+    <div class="card">
+      <h2>Job description</h2>
+      <div class="source-row">
+        <label><input type="radio" name="jdSource" value="scrape" checked> Scrape active tab</label>
+        <label><input type="radio" name="jdSource" value="manual"> Paste manually</label>
+      </div>
+      <div id="manualBlock" hidden>
+        <textarea id="jd" rows="6" placeholder="Paste a JD here…"></textarea>
+        <div class="field-group">
+          <label class="field" style="margin:0">Sample</label>
+          <select id="sampleJd"><option value="">— pick one —</option></select>
+        </div>
+      </div>
+      <div class="actions">
+        <button class="primary" id="tailorBtn" title="Match variant, check qualifications, fit gap, and rewrite bullets">Analyze &amp; tailor</button>
+        <button id="matchBtn" title="Only match and show fit gap — no rewrite">Check fit only</button>
+      </div>
+      <div class="checks">
+        <label><input type="checkbox" id="overrideQualBtn"> Override qual block</label>
+        <label><input type="checkbox" id="forceRewriteBtn"> Force rewrite</label>
+      </div>
+      <div class="timings" id="timings"></div>
+    </div>
+
+    <section id="status"></section>
+
+    <div class="card" id="matchCard" hidden>
+      <h2>Match &amp; qualification</h2>
+      <div class="match-line">
+        Matched <strong id="variantLabel">—</strong>
+        <span id="confidence" class="kw present"></span>
+      </div>
+      <div class="scores" id="scores"></div>
+      <div id="qualBanner"></div>
+    </div>
+
+    <div class="card" id="fitCard" hidden>
+      <h2>Fit gap</h2>
+      <div id="fitgap"></div>
+      <div id="goodEnough"></div>
+    </div>
+
+    <div class="card" id="diffCard" hidden>
+      <h2>Bullet diff <span class="muted-note">— click right column to edit</span></h2>
+      <div class="legend">
+        Added words:
+        <span class="diff-add prov-original">from original</span>
+        <span class="diff-add prov-jd">from JD keyword</span>
+        <span class="diff-add prov-model">model-introduced</span>
+      </div>
+      <div id="diff"></div>
+      <div class="actions">
+        <button class="primary" id="previewBtn" title="Open the tailored resume rendered as a real document in a new tab">Preview</button>
+        <button id="copyBtn" title="Copy the tailored resume text to clipboard">Copy text</button>
+        <button id="docxBtn" title="Download as a Word .docx with formatting">Download .docx</button>
+        <button id="saveBtn" title="Save this application to history">Save to history</button>
+      </div>
+    </div>
   </section>
 
   <section class="panel" id="panel-history">
-    <p><button id="clearHistBtn">Clear all</button></p>
-    <div id="history"></div>
+    <div class="card">
+      <div class="actions"><button id="clearHistBtn">Clear all</button></div>
+      <div id="history"></div>
+    </div>
   </section>
 
   <section class="panel" id="panel-variants">
-    <textarea id="variants" rows="20" spellcheck="false"></textarea>
-    <p><button id="saveVarsBtn">Save variants</button></p>
+    <div class="card">
+      <label class="field">Variants JSON</label>
+      <textarea id="variants" rows="20" spellcheck="false"></textarea>
+      <div class="actions"><button class="primary" id="saveVarsBtn">Save variants</button></div>
+    </div>
   </section>
+
+  <details id="logDetails">
+    <summary>Log</summary>
+    <pre id="log"></pre>
+  </details>
 
   <script src="../src/core/prompts.js"></script>
   <script src="../src/core/resume-parser.js"></script>
@@ -87,6 +108,7 @@
   <script src="../src/lib/history.js"></script>
   <script src="../src/lib/preview.js"></script>
   <script src="../src/models/gemini.js"></script>
+  <script type="module" src="../src/models/embeddings.js"></script>
   <script type="module" src="../src/lib/docx.js"></script>
   <script src="sidepanel.js"></script>
 </body>
