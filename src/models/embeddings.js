@@ -1,7 +1,14 @@
 // Embedding-based variant matcher + bullet ranker using Transformers.js + all-MiniLM-L6-v2 (~25MB).
 // Embeddings are cached in localStorage by content hash so they survive page reloads.
 
-import { pipeline } from "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.0.0/dist/transformers.min.js";
+import { pipeline, env } from "../../vendor/transformers.min.js";
+
+// In the unpacked extension, MV3 CSP forbids remote scripts so we serve the
+// ONNX Runtime WASM from inside the extension. The model weights themselves
+// still stream from huggingface.co via fetch (allowed by default connect-src).
+if (typeof chrome !== "undefined" && chrome.runtime?.getURL) {
+  env.backends.onnx.wasm.wasmPaths = chrome.runtime.getURL("vendor/");
+}
 
 const MODEL = "Xenova/all-MiniLM-L6-v2";
 const CACHE_PREFIX = "emb_v1_";

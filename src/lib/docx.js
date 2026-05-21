@@ -3,7 +3,7 @@
 
 import {
   Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType
-} from "https://esm.run/docx";
+} from "../../vendor/docx.mjs";
 
 function runsFromInline(text) {
   // Parse **bold** markers; everything else is plain.
