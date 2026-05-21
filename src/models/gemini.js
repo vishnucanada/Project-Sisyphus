@@ -32,7 +32,8 @@ window.MODEL = {
   async classify(jd, labels) {
     const s = await getSession(PROMPTS.CLASSIFY_SYSTEM);
     const raw = await s.prompt(PROMPTS.classifyUser(jd, labels), {
-      responseConstraint: PROMPTS.classifySchema(labels)
+      responseConstraint: PROMPTS.classifySchema(labels),
+      outputLanguage: "en"
     });
     const obj = JSON.parse(raw);
     if (typeof obj.confidence !== "number") obj.confidence = 0.5;
@@ -42,7 +43,8 @@ window.MODEL = {
   async checkQualification(jd, resumeText) {
     const s = await getSession(PROMPTS.QUAL_CHECK_SYSTEM);
     const raw = await s.prompt(PROMPTS.qualCheckUser(jd, resumeText), {
-      responseConstraint: PROMPTS.qualCheckSchema()
+      responseConstraint: PROMPTS.qualCheckSchema(),
+      outputLanguage: "en"
     });
     return JSON.parse(raw);
   },
@@ -61,7 +63,7 @@ window.MODEL = {
       try {
         const stream = s.promptStreaming(
           PROMPTS.rewriteBulletsUser({ jd, keywords, sectionTitle, subheading, bullets }),
-          { responseConstraint: PROMPTS.rewriteBulletsSchema(n) }
+          { responseConstraint: PROMPTS.rewriteBulletsSchema(n), outputLanguage: "en" }
         );
         let full = "";
         for await (const chunk of stream) { full += chunk; onProgress?.(full); }

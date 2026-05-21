@@ -4,8 +4,12 @@
   "version": "0.1.0",
   "description": "Scans the active job description and tailors a matching resume variant.",
   "permissions": ["activeTab", "storage", "sidePanel", "scripting"],
+  "host_permissions": ["<all_urls>"],
   "action": { "default_title": "Open Resume Tailor" },
   "side_panel": { "default_path": "extension/sidepanel.html" },
   "background": { "service_worker": "extension/background.js" },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self';"
+  },
   "minimum_chrome_version": "128"
 }
