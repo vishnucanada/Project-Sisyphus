@@ -276,8 +276,20 @@ async function getJD() {
     return { text, site: "manual", url: "", title: "", company: "" };
   }
   status("Scraping JD…");
-  const scrape = await chrome.runtime.sendMessage({ type: "SCRAPE_JD" });
-  if (!scrape?.ok || !scrape.text) { status("Failed to scrape page."); return null; }
+  let scrape;
+  try {
+    scrape = await chrome.runtime.sendMessage({ type: "SCRAPE_JD" });
+  } catch (e) {
+    status("Scrape failed: " + (e?.message || e));
+    log("scrape channel error: " + (e?.message || e));
+    return null;
+  }
+  if (!scrape?.ok || !scrape.text) {
+    const reason = scrape?.error || "no content";
+    status("Scrape failed — " + reason);
+    log("scrape failed: " + reason);
+    return null;
+  }
   status(`Scraped ${scrape.site} · ${scrape.text.length} chars.`);
   log(`scraped ${scrape.site} · ${scrape.text.length} chars`);
   return scrape;

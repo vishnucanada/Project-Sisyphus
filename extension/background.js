@@ -3,14 +3,26 @@ chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (msg.type !== "SCRAPE_JD") return;
   (async () => {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (!tab?.id) return sendResponse({ ok: false, error: "No active tab" });
+    try {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (!tab?.id) return sendResponse({ ok: false, error: "No active tab." });
+      const url = tab.url || "";
+      if (/^(chrome|edge|about|chrome-extension|devtools):/i.test(url)) {
+        return sendResponse({ ok: false, error: `Cannot scrape browser-internal page (${url.split(":")[0]}:). Switch to a job posting tab.` });
+      }
 
-    const [{ result } = {}] = await chrome.scripting.executeScript({
-      target: { tabId: tab.id },
-      func: scrapeJD
-    });
-    sendResponse({ ok: true, ...result, url: tab.url });
+      const results = await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        func: scrapeJD
+      });
+      const result = results?.[0]?.result;
+      if (!result || !result.text) {
+        return sendResponse({ ok: false, error: "Page had no scrapeable content." });
+      }
+      sendResponse({ ok: true, ...result, url });
+    } catch (e) {
+      sendResponse({ ok: false, error: e?.message || String(e) });
+    }
   })();
   return true;
 });
