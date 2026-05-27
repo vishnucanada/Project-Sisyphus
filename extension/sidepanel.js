@@ -203,16 +203,50 @@ function renderDiff(blocks, jdKeywords) {
   }
 }
 
+function escapeHtml(s) {
+  return String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
 async function renderHistory() {
-  const items = await HISTORY.loadHistory();
   const root = $("history");
-  if (!items.length) { root.innerHTML = `<div class="empty">No saved applications yet.</div>`; return; }
-  root.innerHTML = items.map(it => `
+  const items = await HISTORY.loadHistory();
+  const trends = await HISTORY.aggregateKeywords();
+
+  const trendsHtml = trends.count > 0 ? `
+    <div class="trends">
+      <div class="trends-stats">
+        <span><strong>${trends.count}</strong> apps</span>
+        ${trends.coverage != null ? `<span>median coverage <strong>${Math.round(trends.coverage * 100)}%</strong></span>` : ""}
+      </div>
+      ${trends.trending.length ? `
+        <div class="trends-section">
+          <div class="trends-label">Top keywords across JDs</div>
+          <div>${trends.trending.slice(0, 8).map(t =>
+            `<span class="kw present" title="seen in ${t.seen} JDs">${escapeHtml(t.keyword)} <small>×${t.seen}</small></span>`
+          ).join("")}</div>
+        </div>` : ""}
+      ${trends.gaps.length ? `
+        <div class="trends-section">
+          <div class="trends-label">Skill gaps (missing from your resume)</div>
+          <div>${trends.gaps.slice(0, 8).map(g =>
+            `<span class="kw missing" title="missing in ${g.missing} of ${g.seen} JDs">${escapeHtml(g.keyword)} <small>${g.missing}/${g.seen}</small></span>`
+          ).join("")}</div>
+        </div>` : ""}
+    </div>` : "";
+
+  if (!items.length) {
+    root.innerHTML = trendsHtml + `<div class="empty">No saved applications yet.</div>`;
+    return;
+  }
+
+  root.innerHTML = trendsHtml + items.map(it => `
     <div class="hist-row">
-      <strong>${it.company || "?"}</strong> — ${it.role || "?"}<br>
-      <span class="meta">${it.variant} · ${new Date(it.savedAt).toLocaleString()}</span>
+      <strong>${escapeHtml(it.company) || "?"}</strong> — ${escapeHtml(it.role) || "?"}<br>
+      <span class="meta">${escapeHtml(it.variant)} · ${new Date(it.savedAt).toLocaleString()}${
+        typeof it.coverage === "number" ? ` · ${Math.round(it.coverage * 100)}% coverage` : ""
+      }</span>
       <button data-id="${it.id}" class="del">delete</button><br>
-      <span class="meta">${it.url || ""}</span>
+      <span class="meta">${escapeHtml(it.url)}</span>
     </div>`).join("");
   root.querySelectorAll(".del").forEach(b => b.addEventListener("click", async () => {
     await HISTORY.deleteApplication(b.dataset.id); renderHistory();
@@ -358,7 +392,9 @@ async function runFlow({ matchOnly }) {
     url: scrape.url, site: scrape.site,
     company: scrape.company || "", role: scrape.title || "",
     variant: match.label, keywords: cls.keywords,
-    qualVerdict: qual?.verdict || "unknown"
+    qualVerdict: qual?.verdict || "unknown",
+    coverage: gap.coverage,
+    missingKeywords: gap.missing
   };
 
   if (matchOnly) {
