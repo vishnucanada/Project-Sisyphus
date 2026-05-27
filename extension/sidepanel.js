@@ -67,6 +67,8 @@ async function init() {
     status("LLM ready.");
   }
 
+  MODEL.preloadSessions?.();
+
   if (window.EMBEDDINGS) {
     log("warming embedding model…");
     $("embDiag").textContent = "Emb: loading";
@@ -308,30 +310,33 @@ async function runFlow({ matchOnly }) {
 
   const resumeText = variants[match.label];
 
-  log("checking qualifications…");
-  status("Checking qualifications…");
+  const override = $("overrideQualBtn").checked;
+  status(override ? "Extracting keywords…" : "Checking qualifications + keywords…");
+  log(override
+    ? "extracting JD keywords (qual skipped — override on)…"
+    : "running qual check + keyword extraction in parallel…");
   t0 = performance.now();
-  let qual;
-  try { qual = await MODEL.checkQualification(jd, resumeText); }
-  catch (e) { log("qual check failed (continuing): " + e.message); }
-  const qualMs = (performance.now() - t0).toFixed(0);
+
+  // When override is on, skip the qual call entirely — we'd ignore the result anyway.
+  const qualPromise = override
+    ? Promise.resolve(null)
+    : MODEL.checkQualification(jd, resumeText).catch(e => { log("qual check failed (continuing): " + e.message); return null; });
+  const clsPromise = MODEL.classify(jd, Object.keys(variants));
+
+  const [qual, cls] = await Promise.all([qualPromise, clsPromise]);
+  const parallelMs = (performance.now() - t0).toFixed(0);
+
   if (qual) {
-    log(`qual: ${qual.verdict} (${qualMs}ms) — ${qual.reasoning}`);
+    log(`qual: ${qual.verdict} — ${qual.reasoning}`);
     renderQual(qual);
-    if (qual.verdict === "underqualified" && !$("overrideQualBtn").checked) {
+    if (qual.verdict === "underqualified") {
       log("STOP: underqualified. Tick 'Override qual block' to proceed.");
       status("BLOCKED — underqualified. Tick override to proceed.");
-      $("timings").textContent = `match ${matchMs}ms · qual ${qualMs}ms (BLOCKED)`;
+      $("timings").textContent = `match ${matchMs}ms · qual+kw ${parallelMs}ms (BLOCKED)`;
       return;
     }
   }
-
-  log("extracting JD keywords…");
-  status("Extracting JD keywords…");
-  t0 = performance.now();
-  const cls = await MODEL.classify(jd, Object.keys(variants));
-  const kwMs = (performance.now() - t0).toFixed(0);
-  log(`keywords (${kwMs}ms): ${cls.keywords.join(", ")}`);
+  log(`keywords: ${cls.keywords.join(", ")}`);
   const gap = PROMPTS.fitGap(cls.keywords, resumeText);
   renderFitGap(gap);
   $("fitCard").hidden = false;
@@ -345,7 +350,7 @@ async function runFlow({ matchOnly }) {
   };
 
   if (matchOnly) {
-    $("timings").textContent = `match ${matchMs}ms · qual ${qualMs}ms · kw ${kwMs}ms`;
+    $("timings").textContent = `match ${matchMs}ms · qual+kw ${parallelMs}ms`;
     log("Check-fit done. Click 'Analyze & tailor' to rewrite.");
     status("Check-fit done.");
     return;
@@ -366,7 +371,7 @@ async function runFlow({ matchOnly }) {
       await doRewrite(RESUME_PARSER.parseResume(resumeText), CURRENT_CONTEXT);
       $("goodEnough").innerHTML = "";
     });
-    $("timings").textContent = `match ${matchMs}ms · qual ${qualMs}ms · kw ${kwMs}ms (no rewrite needed)`;
+    $("timings").textContent = `match ${matchMs}ms · qual+kw ${parallelMs}ms (no rewrite needed)`;
     status("No rewrite needed — preview/export the original.");
     return;
   }
@@ -375,7 +380,7 @@ async function runFlow({ matchOnly }) {
   const blocks = RESUME_PARSER.parseResume(resumeText);
   await doRewrite(blocks, CURRENT_CONTEXT);
   const rewriteMs = (performance.now() - tRewrite).toFixed(0);
-  $("timings").textContent = `match ${matchMs}ms · qual ${qualMs}ms · kw ${kwMs}ms · rewrite ${rewriteMs}ms`;
+  $("timings").textContent = `match ${matchMs}ms · qual+kw ${parallelMs}ms · rewrite ${rewriteMs}ms`;
 }
 
 $("tailorBtn").addEventListener("click", () => runFlow({ matchOnly: false }).catch(e => { log("ERR: " + e.message); status("Error: " + e.message); }));
